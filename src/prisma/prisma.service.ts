@@ -8,7 +8,6 @@ export class PrismaService
 {
   async onModuleInit() {
     await this.$connect();
-    console.log('999');
   }
 
   async onModuleDestroy() {
