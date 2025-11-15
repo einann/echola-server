@@ -13,3 +13,84 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  
+  // Profile information
+  displayName String?  @map("display_name")
+  username    String?  @unique
+  bio         String?
+  avatarUrl   String?  @map("avatar_url")
+  
+  // Status and presence
+  statusMessage String?  @map("status_message")
+  isOnline      Boolean  @default(false) @map("is_online")
+  lastSeenAt    DateTime? @map("last_seen_at")
+  
+  // Account management
+  isActive      Boolean   @default(true) @map("is_active")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  devices       Device[]
+  refreshTokens RefreshToken[]
+  
+  @@map("users")
+}
+
+model Device {
+  id       String @id @default(uuid())
+  userId   String @map("user_id")
+  
+  // Device identification
+  deviceId   String @unique @map("device_id") // Generated client-side
+  deviceName String @map("device_name") // e.g., "iPhone 13", "Chrome on MacBook"
+  deviceType String @map("device_type") // mobile, desktop, web
+  
+  // Device metadata
+  userAgent     String? @map("user_agent")
+  ipAddress     String? @map("ip_address")
+  lastActiveAt  DateTime @default(now()) @map("last_active_at")
+  
+  // Push notification token
+  fcmToken String? @map("fcm_token")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens RefreshToken[]
+  
+  @@index([userId])
+  @@map("devices")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  deviceId  String   @map("device_id")
+  
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([deviceId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
