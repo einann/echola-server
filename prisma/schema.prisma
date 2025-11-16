@@ -1,18 +1,30 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum DeliveryStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+// ============================================
+// USER & AUTH MODELS
+// ============================================
 
 model User {
   id        String   @id @default(uuid())
@@ -39,13 +51,14 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
   
   // Relations
-  devices                   Device[]
-  refreshTokens             RefreshToken[]
-  conversationParticipants  ConversationParticipant[]
-  sentMessages              Message[]                 @relation("SentMessages")
-  messageStatuses           MessageStatus[]
-  messageReactions          MessageReaction[]
-  createdConversations      Conversation[]            @relation("ConversationCreator")
+  devices                  Device[]
+  refreshTokens            RefreshToken[]
+  conversationParticipants ConversationParticipant[]
+  sentMessages             Message[]                 @relation("SentMessages")
+  messageStatuses          MessageStatus[]
+  messageReactions         MessageReaction[]
+  createdConversations     Conversation[]            @relation("ConversationCreator")
+  
   @@map("users")
 }
 
@@ -54,9 +67,9 @@ model Device {
   userId   String @map("user_id")
   
   // Device identification
-  deviceId   String @unique @map("device_id") // Generated client-side
-  deviceName String @map("device_name") // e.g., "iPhone 13", "Chrome on MacBook"
-  deviceType String @map("device_type") // mobile, desktop, web
+  deviceId   String @unique @map("device_id")
+  deviceName String @map("device_name")
+  deviceType String @map("device_type")
   
   // Device metadata
   userAgent     String? @map("user_agent")
@@ -99,18 +112,9 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-/** */
-
-enum ConversationType {
-  DIRECT
-  GROUP
-}
-
-enum DeliveryStatus  {
-  SENT
-  DELIVERED
-  READ
-}
+// ============================================
+// MESSAGING MODELS
+// ============================================
 
 model Conversation {
   id        String           @id @default(uuid())
@@ -119,8 +123,8 @@ model Conversation {
   // Group-specific fields (null for DIRECT chats)
   name        String?
   description String?
-  avatarUrl   String?         @map("avatar_url")
-  createdBy   String?         @map("created_by")
+  avatarUrl   String?  @map("avatar_url")
+  createdBy   String?  @map("created_by")
   
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -140,8 +144,8 @@ model ConversationParticipant {
   userId         String   @map("user_id")
   
   // Participant metadata
-  role           String   @default("member") // member, admin (for groups)
-  joinedAt       DateTime @default(now()) @map("joined_at")
+  role           String    @default("member") // member, admin (for groups)
+  joinedAt       DateTime  @default(now()) @map("joined_at")
   lastReadAt     DateTime? @map("last_read_at")
   
   // Notification settings
@@ -170,10 +174,10 @@ model Message {
   contentType String   @default("text") @map("content_type") // text, image, video, audio, document
   
   // Media attachments
-  mediaUrl    String?  @map("media_url")
+  mediaUrl     String? @map("media_url")
   thumbnailUrl String? @map("thumbnail_url")
-  fileName    String?  @map("file_name")
-  fileSize    Int?     @map("file_size") // in bytes
+  fileName     String? @map("file_name")
+  fileSize     Int?    @map("file_size") // in bytes
   
   // Message metadata
   replyToId   String?  @map("reply_to_id") // For threaded replies
@@ -181,8 +185,8 @@ model Message {
   isDeleted   Boolean  @default(false) @map("is_deleted")
   
   // Timestamps
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
   editedAt  DateTime? @map("edited_at")
   deletedAt DateTime? @map("deleted_at")
   
@@ -205,7 +209,7 @@ model MessageStatus {
   messageId String @map("message_id")
   userId    String @map("user_id")
   
-  status       DeliveryStatus @default(SENT)  // ← Changed here
+  status       DeliveryStatus @default(SENT)
   deliveredAt  DateTime?      @map("delivered_at")
   readAt       DateTime?      @map("read_at")
   
