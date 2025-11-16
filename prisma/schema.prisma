@@ -39,9 +39,13 @@ model User {
   updatedAt DateTime @updatedAt @map("updated_at")
   
   // Relations
-  devices       Device[]
-  refreshTokens RefreshToken[]
-  
+  devices                   Device[]
+  refreshTokens             RefreshToken[]
+  conversationParticipants  ConversationParticipant[]
+  sentMessages              Message[]                 @relation("SentMessages")
+  messageStatuses           MessageStatus[]
+  messageReactions          MessageReaction[]
+  createdConversations      Conversation[]            @relation("ConversationCreator")
   @@map("users")
 }
 
@@ -93,4 +97,141 @@ model RefreshToken {
   @@index([deviceId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+/** */
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum DeliveryStatus  {
+  SENT
+  DELIVERED
+  READ
+}
+
+model Conversation {
+  id        String           @id @default(uuid())
+  type      ConversationType
+  
+  // Group-specific fields (null for DIRECT chats)
+  name        String?
+  description String?
+  avatarUrl   String?         @map("avatar_url")
+  createdBy   String?         @map("created_by")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  // Relations
+  participants ConversationParticipant[]
+  messages     Message[]
+  creator      User?                     @relation("ConversationCreator", fields: [createdBy], references: [id])
+  
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  userId         String   @map("user_id")
+  
+  // Participant metadata
+  role           String   @default("member") // member, admin (for groups)
+  joinedAt       DateTime @default(now()) @map("joined_at")
+  lastReadAt     DateTime? @map("last_read_at")
+  
+  // Notification settings
+  isMuted        Boolean  @default(false) @map("is_muted")
+  
+  // Soft delete for leaving conversations
+  leftAt         DateTime? @map("left_at")
+  
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@index([conversationId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  
+  // Message content
+  content     String?  // Text content (null for media-only messages)
+  contentType String   @default("text") @map("content_type") // text, image, video, audio, document
+  
+  // Media attachments
+  mediaUrl    String?  @map("media_url")
+  thumbnailUrl String? @map("thumbnail_url")
+  fileName    String?  @map("file_name")
+  fileSize    Int?     @map("file_size") // in bytes
+  
+  // Message metadata
+  replyToId   String?  @map("reply_to_id") // For threaded replies
+  isEdited    Boolean  @default(false) @map("is_edited")
+  isDeleted   Boolean  @default(false) @map("is_deleted")
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  editedAt  DateTime? @map("edited_at")
+  deletedAt DateTime? @map("deleted_at")
+  
+  // Relations
+  conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User              @relation("SentMessages", fields: [senderId], references: [id])
+  replyTo      Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]         @relation("MessageReplies")
+  statuses     MessageStatus[]
+  reactions    MessageReaction[]
+  
+  // Critical indexes for performance
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model MessageStatus {
+  id        String @id @default(uuid())
+  messageId String @map("message_id")
+  userId    String @map("user_id")
+  
+  status       DeliveryStatus @default(SENT)  // ← Changed here
+  deliveredAt  DateTime?      @map("delivered_at")
+  readAt       DateTime?      @map("read_at")
+  
+  // Relations
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+  
+  @@unique([messageId, userId])
+  @@index([userId])
+  @@index([messageId])
+  @@map("message_statuses")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  
+  emoji     String   // The emoji/reaction
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+  
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("message_reactions")
 }
