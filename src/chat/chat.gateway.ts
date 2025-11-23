@@ -8,7 +8,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UsePipes, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, UsePipes, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { MessagesService } from '../messages/messages.service';
@@ -19,11 +19,17 @@ import {
   MessageDeliveredEvent,
   MessageReadEvent,
   TypingEvent,
+  RequestFileUploadEvent,
+  ConfirmFileUploadEvent,
 } from './dto/websocket-events.dto';
+import { StorageService } from 'src/storage/storage.service';
+import { FileProcessorService } from 'src/storage/file-processor.service';
+import { AuthenticatedSocket } from './types/socket.types';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    // origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: '*',
     credentials: true,
   },
   namespace: '/chat',
@@ -39,16 +45,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private messagesService: MessagesService,
     private redisService: RedisService,
     private prismaService: PrismaService,
+    private storageService: StorageService,
+    private fileProcessorService: FileProcessorService,
   ) {
     // Subscribe to Redis pub/sub for cross-server message delivery
-    this.subscribeToRedisChannels();
+    void this.subscribeToRedisChannels();
   }
 
   // ============================================
   // Connection Lifecycle
   // ============================================
 
-  async handleConnection(client: Socket) {
+  async handleConnection(client: AuthenticatedSocket) {
     try {
       // Extract token from handshake
       const token =
@@ -107,8 +115,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  async handleDisconnect(client: Socket) {
-    const userId = client.data.userId as string;
+  async handleDisconnect(client: AuthenticatedSocket) {
+    const userId = client.data.userId;
 
     if (userId) {
       // Mark user as offline in Redis
@@ -136,7 +144,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send_message')
   async handleSendMessage(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: SendMessageEvent,
   ) {
     try {
@@ -220,7 +228,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('message_delivered')
   async handleMessageDelivered(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: MessageDeliveredEvent,
   ) {
     try {
@@ -251,7 +259,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('message_read')
   async handleMessageRead(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: MessageReadEvent,
   ) {
     try {
@@ -286,7 +294,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('typing_start')
   async handleTypingStart(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: TypingEvent,
   ) {
     const userId = client.data.userId;
@@ -303,7 +311,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('typing_stop')
   handleTypingStop(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: TypingEvent,
   ) {
     const userId = client.data.userId;
@@ -318,10 +326,243 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   // ============================================
+  // File Upload via WebSocket
+  // ============================================
+
+  @SubscribeMessage('file:upload:request')
+  async handleFileUploadRequest(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: RequestFileUploadEvent,
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      // Verify user is participant in the conversation
+      const participant =
+        await this.prismaService.conversationParticipant.findFirst({
+          where: {
+            conversationId: data.conversationId,
+            userId,
+            leftAt: null,
+          },
+        });
+
+      if (!participant) {
+        client.emit('error', {
+          message: 'You are not a participant in this conversation',
+        });
+        return { success: false };
+      }
+
+      // Validate file type and size
+      this.validateFileRequest(data.fileType, data.fileSize, data.mimeType);
+
+      // Generate presigned upload URL (5 minutes expiry)
+      const { uploadUrl, fileKey } =
+        await this.storageService.generateUploadUrl(
+          data.fileName,
+          data.mimeType,
+          300,
+        );
+
+      // Cache the file metadata in Redis temporarily (5 minutes TTL)
+      // This prevents users from confirming uploads they didn't request
+      await this.redisService.set(
+        `upload:${userId}:${fileKey}`,
+        JSON.stringify({
+          fileName: data.fileName,
+          fileType: data.fileType,
+          conversationId: data.conversationId,
+          fileSize: data.fileSize,
+        }),
+        300, // 5 minutes
+      );
+
+      // Send presigned URL back to client
+      client.emit('file:upload:url', {
+        uploadUrl,
+        fileKey,
+        expiresIn: 300,
+        instructions: 'Use PUT request to upload file directly to this URL',
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error requesting file upload:', error);
+      client.emit('error', {
+        message: 'Failed to generate upload URL',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('file:upload:complete')
+  async handleFileUploadComplete(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: ConfirmFileUploadEvent,
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      // Verify this upload request was initiated by this user
+      const uploadMetadata = await this.redisService.get(
+        `upload:${userId}:${data.fileKey}`,
+      );
+
+      if (!uploadMetadata) {
+        client.emit('error', {
+          message: 'Invalid or expired upload request',
+        });
+        return { success: false };
+      }
+
+      const metadata = JSON.parse(uploadMetadata);
+
+      // Verify conversation matches
+      if (metadata.conversationId !== data.conversationId) {
+        client.emit('error', {
+          message: 'Conversation mismatch',
+        });
+        return { success: false };
+      }
+
+      let mediaUrl = this.storageService.getPublicUrl(data.fileKey);
+      let thumbnailUrl: string | undefined;
+      let processedFileSize = data.fileSize;
+
+      // Process images: compress, resize, create thumbnail
+      if (data.fileType === 'image') {
+        try {
+          // Download the uploaded file from S3
+          const downloadUrl = await this.storageService.generateDownloadUrl(
+            data.fileKey,
+          );
+          const response = await fetch(downloadUrl);
+          const buffer = Buffer.from(await response.arrayBuffer());
+
+          // Process image (compress, resize, create thumbnail)
+          const { processedBuffer, thumbnailBuffer } =
+            await this.fileProcessorService.validateAndProcessImage(buffer);
+
+          // Upload processed image
+          const processedFileKey = `processed/${data.fileKey}`;
+          await this.storageService.uploadFile(
+            processedFileKey,
+            processedBuffer,
+            'image/jpeg',
+          );
+          mediaUrl = this.storageService.getPublicUrl(processedFileKey);
+          processedFileSize = processedBuffer.length;
+
+          // Upload thumbnail
+          const thumbnailFileKey = `thumbnails/${data.fileKey}`;
+          await this.storageService.uploadFile(
+            thumbnailFileKey,
+            thumbnailBuffer,
+            'image/jpeg',
+          );
+          thumbnailUrl = this.storageService.getPublicUrl(thumbnailFileKey);
+
+          // Delete original unprocessed file
+          await this.storageService.deleteFile(data.fileKey);
+        } catch (error) {
+          console.error('Error processing image:', error);
+          // Fall back to using original upload if processing fails
+          console.log('Using original uploaded image');
+        }
+      }
+
+      // Create message with media
+      const message = await this.messagesService.sendMessage(userId, {
+        conversationId: data.conversationId,
+        content: data.content || '', // Optional caption
+        contentType: data.fileType,
+        mediaUrl,
+        thumbnailUrl,
+        fileName: data.fileName,
+        fileSize: processedFileSize,
+      });
+
+      // Delete the temporary upload metadata from Redis
+      await this.redisService.del(`upload:${userId}:${data.fileKey}`);
+
+      // Acknowledge to sender
+      client.emit('file:upload:success', {
+        message,
+      });
+
+      // Get conversation participants
+      const participants =
+        await this.prismaService.conversationParticipant.findMany({
+          where: {
+            conversationId: data.conversationId,
+            userId: { not: userId },
+            leftAt: null,
+          },
+        });
+
+      // Invalidate conversation cache
+      await this.redisService.invalidateConversationCache(data.conversationId);
+
+      // Deliver to online recipients via WebSocket
+      for (const participant of participants) {
+        const isOnline = await this.redisService.isUserOnline(
+          participant.userId,
+        );
+
+        if (isOnline) {
+          // Deliver via WebSocket
+          this.server
+            .to(`user:${participant.userId}`)
+            .emit('new_message', message);
+
+          // Auto-mark as delivered after 1 second
+          setTimeout(async () => {
+            await this.messagesService.markMessageAsDelivered(
+              participant.userId,
+              message.id,
+            );
+
+            // Notify sender of delivery
+            this.server.to(`user:${userId}`).emit('message_delivered', {
+              messageId: message.id,
+              userId: participant.userId,
+              deliveredAt: new Date(),
+            });
+          }, 1000);
+        } else {
+          // User offline: add to Redis inbox
+          await this.redisService.addToInbox(participant.userId, message);
+        }
+      }
+
+      // Publish to Redis for other server instances
+      await this.redisService.publish(`conversation:${data.conversationId}`, {
+        type: 'new_message',
+        message,
+        senderId: userId,
+      });
+
+      return { success: true, messageId: message.id };
+    } catch (error) {
+      console.error('Error completing file upload:', error);
+      client.emit('error', {
+        message: 'Failed to complete file upload',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================
   // Helper Methods
   // ============================================
 
-  private async deliverQueuedMessages(userId: string, client: Socket) {
+  private async deliverQueuedMessages(
+    userId: string,
+    client: AuthenticatedSocket,
+  ) {
     try {
       const queuedMessages = await this.redisService.getInboxMessages(userId);
 
@@ -392,5 +633,54 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           .emit('new_message', data.message);
       }
     });
+  }
+
+  // ============================================
+  // Helper: Validate File Request
+  // ============================================
+
+  private validateFileRequest(
+    fileType: string,
+    fileSize: number,
+    mimeType: string,
+  ) {
+    const allowedTypes = this.getAllowedMimeTypes(fileType);
+    const maxSize = this.getMaxFileSize(fileType);
+
+    if (!allowedTypes.includes(mimeType)) {
+      throw new BadRequestException(`Invalid MIME type for ${fileType}`);
+    }
+
+    if (fileSize > maxSize) {
+      throw new BadRequestException(
+        `File size exceeds ${maxSize / 1024 / 1024}MB limit for ${fileType}`,
+      );
+    }
+  }
+
+  private getAllowedMimeTypes(fileType: string): string[] {
+    const mimeTypes = {
+      image: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+      video: ['video/mp4', 'video/quicktime', 'video/webm'],
+      audio: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/webm'],
+      document: [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      ],
+    };
+
+    return mimeTypes[fileType] || [];
+  }
+
+  private getMaxFileSize(fileType: string): number {
+    const sizes = {
+      image: this.configService.get<number>('MAX_IMAGE_SIZE') || 10485760, // 10MB
+      video: this.configService.get<number>('MAX_VIDEO_SIZE') || 104857600, // 100MB
+      audio: this.configService.get<number>('MAX_DOCUMENT_SIZE') || 26214400, // 25MB
+      document: this.configService.get<number>('MAX_DOCUMENT_SIZE') || 26214400, // 25MB
+    };
+
+    return sizes[fileType] || 10485760; // 10MB default
   }
 }
