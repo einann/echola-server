@@ -5,6 +5,7 @@ import { createClient } from 'redis';
 import { INestApplicationContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+// src/adapters/redis-io.adapter.ts
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter>;
 
@@ -16,20 +17,47 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   async connectToRedis(): Promise<void> {
+    const redisHost = this.configService.get('REDIS_HOST') as string;
+    const redisPort = this.configService.get('REDIS_PORT') as number;
+
+    console.log(
+      `Attempting to connect to Redis at ${redisHost}:${redisPort}...`,
+    );
+
     const pubClient = createClient({
       socket: {
-        host: this.configService.get('REDIS_HOST'),
-        port: this.configService.get('REDIS_PORT'),
+        host: redisHost,
+        port: redisPort,
       },
     });
 
     const subClient = pubClient.duplicate();
 
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    // Add error handlers BEFORE connecting
+    pubClient.on('error', (err) => {
+      console.error('❌ Redis Pub Client Error:', err.message);
+    });
 
-    this.adapterConstructor = createAdapter(pubClient, subClient);
+    subClient.on('error', (err) => {
+      console.error('❌ Redis Sub Client Error:', err.message);
+    });
 
-    console.log('Socket.IO Redis Adapter connected');
+    pubClient.on('connect', () => {
+      console.log('✅ Redis Pub Client connected');
+    });
+
+    subClient.on('connect', () => {
+      console.log('✅ Redis Sub Client connected');
+    });
+
+    try {
+      await Promise.all([pubClient.connect(), subClient.connect()]);
+      this.adapterConstructor = createAdapter(pubClient, subClient);
+      console.log('✅ Socket.IO Redis Adapter connected successfully');
+    } catch (error) {
+      console.error('❌ Failed to connect Redis adapter:', error.message);
+      throw error;
+    }
   }
 
   createIOServer(port: number, options?: ServerOptions): any {

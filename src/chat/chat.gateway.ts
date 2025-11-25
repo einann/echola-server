@@ -25,10 +25,15 @@ import {
 import { StorageService } from 'src/storage/storage.service';
 import { FileProcessorService } from 'src/storage/file-processor.service';
 import { AuthenticatedSocket } from './types/socket.types';
+import { ReactionsService } from 'src/messages/reactions.service';
+import {
+  AddReactionEvent,
+  RemoveReactionEvent,
+} from './dto/reaction-events.dto';
 
 @WebSocketGateway({
   cors: {
-    // origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    // origin: process.env.FRONTEND_URL || 'http://localhost:3000', // TODO
     origin: '*',
     credentials: true,
   },
@@ -47,6 +52,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private prismaService: PrismaService,
     private storageService: StorageService,
     private fileProcessorService: FileProcessorService,
+    private reactionsService: ReactionsService,
   ) {
     // Subscribe to Redis pub/sub for cross-server message delivery
     void this.subscribeToRedisChannels();
@@ -549,6 +555,144 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       console.error('Error completing file upload:', error);
       client.emit('error', {
         message: 'Failed to complete file upload',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================
+  // Message Reactions
+  // ============================================
+
+  @SubscribeMessage('message:reaction:add')
+  async handleAddReaction(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: AddReactionEvent,
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      // Add reaction via service
+      const reaction = await this.reactionsService.addReaction(
+        userId,
+        data.messageId,
+        data.emoji,
+      );
+
+      if (!reaction) {
+        throw new Error('Reaction creation error.');
+      }
+
+      // Acknowledge to sender
+      client.emit('message:reaction:added', {
+        reaction,
+      });
+
+      // Broadcast to all participants in the conversation
+      this.server
+        .to(`conversation:${reaction.message.conversationId}`)
+        .emit('message:reaction:updated', {
+          messageId: data.messageId,
+          reaction: {
+            id: reaction.id,
+            emoji: reaction.emoji,
+            user: reaction.user,
+            createdAt: reaction.createdAt,
+          },
+          action: 'add',
+        });
+
+      // Publish to Redis for other server instances
+      await this.redisService.publish(
+        `conversation:${reaction.message.conversationId}`,
+        {
+          type: 'reaction_added',
+          messageId: data.messageId,
+          reaction,
+        },
+      );
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding reaction:', error);
+      client.emit('error', {
+        message: 'Failed to add reaction',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('message:reaction:remove')
+  async handleRemoveReaction(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: RemoveReactionEvent,
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      // Remove reaction via service
+      const result = await this.reactionsService.removeReaction(
+        userId,
+        data.messageId,
+        data.emoji,
+      );
+
+      // Acknowledge to sender
+      client.emit('message:reaction:removed', {
+        messageId: data.messageId,
+        emoji: data.emoji,
+      });
+
+      // Broadcast to all participants in the conversation
+      this.server
+        .to(`conversation:${result.conversationId}`)
+        .emit('message:reaction:updated', {
+          messageId: data.messageId,
+          reaction: {
+            emoji: data.emoji,
+            userId,
+          },
+          action: 'remove',
+        });
+
+      // Publish to Redis for other server instances
+      await this.redisService.publish(`conversation:${result.conversationId}`, {
+        type: 'reaction_removed',
+        messageId: data.messageId,
+        emoji: data.emoji,
+        userId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing reaction:', error);
+      client.emit('error', {
+        message: 'Failed to remove reaction',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('message:reactions:get')
+  async handleGetReactions(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { messageId: string },
+  ) {
+    try {
+      const reactions = await this.reactionsService.getMessageReactions(
+        data.messageId,
+      );
+
+      client.emit('message:reactions:list', reactions);
+
+      return { success: true, reactions };
+    } catch (error) {
+      console.error('Error getting reactions:', error);
+      client.emit('error', {
+        message: 'Failed to get reactions',
         error: error.message,
       });
       return { success: false, error: error.message };
