@@ -30,6 +30,14 @@ import {
   AddReactionEvent,
   RemoveReactionEvent,
 } from './dto/reaction-events.dto';
+import { GroupManagementService } from 'src/conversations/group-management.service';
+import {
+  AddMembersDto,
+  LeaveGroupDto,
+  RemoveMemberDto,
+  UpdateGroupInfoDto,
+  UpdateMemberRoleDto,
+} from 'src/conversations/dto/group-management.dto';
 
 @WebSocketGateway({
   cors: {
@@ -53,6 +61,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private storageService: StorageService,
     private fileProcessorService: FileProcessorService,
     private reactionsService: ReactionsService,
+    private groupManagementService: GroupManagementService,
   ) {
     // Subscribe to Redis pub/sub for cross-server message delivery
     void this.subscribeToRedisChannels();
@@ -693,6 +702,320 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       console.error('Error getting reactions:', error);
       client.emit('error', {
         message: 'Failed to get reactions',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  // ============================================
+  // Group Management
+  // ============================================
+
+  @SubscribeMessage('group:members:add')
+  async handleAddMembers(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: AddMembersDto,
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      const result = await this.groupManagementService.addMembers(
+        userId,
+        data.conversationId,
+        data.userIds,
+      );
+
+      // Acknowledge to admin
+      client.emit('group:members:added', result);
+
+      // Notify all existing members
+      this.server
+        .to(`conversation:${data.conversationId}`)
+        .emit('group:member:joined', {
+          conversationId: data.conversationId,
+          members: result.addedMembers,
+          addedBy: userId,
+        });
+
+      // Notify newly added members and have them join the room
+      for (const member of result.addedMembers) {
+        this.server.to(`user:${member.id}`).emit('group:added', {
+          conversation: result.conversation,
+          addedBy: userId,
+        });
+
+        // Add them to the conversation room
+        const memberSockets = await this.server
+          .to(`user:${member.id}`)
+          .fetchSockets();
+        for (const socket of memberSockets) {
+          socket.join(`conversation:${data.conversationId}`);
+        }
+      }
+
+      // Publish to Redis
+      await this.redisService.publish(`conversation:${data.conversationId}`, {
+        type: 'members_added',
+        members: result.addedMembers,
+        addedBy: userId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding members:', error);
+      client.emit('error', {
+        message: 'Failed to add members',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('group:member:remove')
+  async handleRemoveMember(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: RemoveMemberDto,
+  ) {
+    try {
+      const adminId = client.data.userId;
+
+      const result = await this.groupManagementService.removeMember(
+        adminId,
+        data.conversationId,
+        data.userId,
+      );
+
+      // Acknowledge to admin
+      client.emit('group:member:removed', result);
+
+      // Notify the removed user
+      this.server.to(`user:${data.userId}`).emit('group:removed', {
+        conversationId: data.conversationId,
+        removedBy: adminId,
+      });
+
+      // Remove them from the conversation room
+      const removedUserSockets = await this.server
+        .to(`user:${data.userId}`)
+        .fetchSockets();
+      for (const socket of removedUserSockets) {
+        socket.leave(`conversation:${data.conversationId}`);
+      }
+
+      // Notify remaining members
+      this.server
+        .to(`conversation:${data.conversationId}`)
+        .emit('group:member:left', {
+          conversationId: data.conversationId,
+          user: result.removedUser,
+          removedBy: adminId,
+        });
+
+      // Publish to Redis
+      await this.redisService.publish(`conversation:${data.conversationId}`, {
+        type: 'member_removed',
+        userId: data.userId,
+        removedBy: adminId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error removing member:', error);
+      client.emit('error', {
+        message: 'Failed to remove member',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('group:leave')
+  async handleLeaveGroup(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: LeaveGroupDto,
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      const result = await this.groupManagementService.leaveGroup(
+        userId,
+        data.conversationId,
+      );
+
+      // Acknowledge to user
+      client.emit('group:left', result);
+
+      // Remove from conversation room
+      client.leave(`conversation:${data.conversationId}`);
+
+      // Get user info for notification
+      const user = await this.prismaService.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          displayName: true,
+          username: true,
+          avatarUrl: true,
+        },
+      });
+
+      // Notify remaining members
+      this.server
+        .to(`conversation:${data.conversationId}`)
+        .emit('group:member:left', {
+          conversationId: data.conversationId,
+          user,
+          leftVoluntarily: true,
+        });
+
+      // Publish to Redis
+      await this.redisService.publish(`conversation:${data.conversationId}`, {
+        type: 'member_left',
+        userId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error leaving group:', error);
+      client.emit('error', {
+        message: 'Failed to leave group',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('group:role:update')
+  async handleUpdateRole(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: UpdateMemberRoleDto,
+  ) {
+    try {
+      const adminId = client.data.userId;
+
+      const result = await this.groupManagementService.updateMemberRole(
+        adminId,
+        data.conversationId,
+        data.userId,
+        data.role,
+      );
+
+      // Acknowledge to admin
+      client.emit('group:role:updated', result);
+
+      // Notify the user whose role changed
+      this.server.to(`user:${data.userId}`).emit('group:your_role:updated', {
+        conversationId: data.conversationId,
+        newRole: data.role,
+        updatedBy: adminId,
+      });
+
+      // Notify all members
+      this.server
+        .to(`conversation:${data.conversationId}`)
+        .emit('group:member:role:changed', {
+          conversationId: data.conversationId,
+          user: result.user,
+          newRole: data.role,
+          updatedBy: adminId,
+        });
+
+      // Publish to Redis
+      await this.redisService.publish(`conversation:${data.conversationId}`, {
+        type: 'role_updated',
+        userId: data.userId,
+        newRole: data.role,
+        updatedBy: adminId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating role:', error);
+      client.emit('error', {
+        message: 'Failed to update role',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('group:info:update')
+  async handleUpdateGroupInfo(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: UpdateGroupInfoDto,
+  ) {
+    try {
+      const adminId = client.data.userId;
+
+      const result = await this.groupManagementService.updateGroupInfo(
+        adminId,
+        data.conversationId,
+        {
+          name: data.name,
+          description: data.description,
+          avatarUrl: data.avatarUrl,
+        },
+      );
+
+      // Acknowledge to admin
+      client.emit('group:info:updated', result);
+
+      // Notify all members
+      this.server
+        .to(`conversation:${data.conversationId}`)
+        .emit('group:info:changed', {
+          conversationId: data.conversationId,
+          updates: {
+            name: data.name,
+            description: data.description,
+            avatarUrl: data.avatarUrl,
+          },
+          updatedBy: adminId,
+        });
+
+      // Publish to Redis
+      await this.redisService.publish(`conversation:${data.conversationId}`, {
+        type: 'info_updated',
+        updates: {
+          name: data.name,
+          description: data.description,
+          avatarUrl: data.avatarUrl,
+        },
+        updatedBy: adminId,
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating group info:', error);
+      client.emit('error', {
+        message: 'Failed to update group info',
+        error: error.message,
+      });
+      return { success: false, error: error.message };
+    }
+  }
+
+  @SubscribeMessage('group:members:get')
+  async handleGetMembers(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { conversationId: string },
+  ) {
+    try {
+      const userId = client.data.userId;
+
+      const result = await this.groupManagementService.getGroupMembers(
+        userId,
+        data.conversationId,
+      );
+
+      client.emit('group:members:list', result);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error getting members:', error);
+      client.emit('error', {
+        message: 'Failed to get members',
         error: error.message,
       });
       return { success: false, error: error.message };

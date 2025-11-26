@@ -6,6 +6,7 @@ import { MessagesModule } from '../messages/messages.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RedisModule } from '../redis/redis.module';
 import { StorageModule } from 'src/storage/storage.module';
+import { GroupManagementService } from 'src/conversations/group-management.service';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { StorageModule } from 'src/storage/storage.module';
     RedisModule,
     StorageModule,
   ],
-  providers: [ChatGateway],
+  providers: [ChatGateway, GroupManagementService],
   exports: [ChatGateway],
 })
 export class ChatModule {}
