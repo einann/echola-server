@@ -1,4 +1,5 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+// src/storage/storage.service.ts
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
@@ -9,18 +10,29 @@ import {
   CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import * as crypto from 'crypto';
 
+export interface PresignedUploadResult {
+  uploadUrl: string;
+  fileKey: string;
+}
+
+/**
+ * Low-level S3/MinIO storage operations
+ * This service ONLY handles direct interactions with the storage backend
+ */
 @Injectable()
 export class StorageService implements OnModuleInit {
+  private readonly logger = new Logger(StorageService.name);
   private s3Client: S3Client;
   private bucketName: string;
+  private s3Endpoint: string;
 
   constructor(private configService: ConfigService) {
     this.bucketName = this.configService.get('S3_BUCKET_NAME') as string;
+    this.s3Endpoint = this.configService.get('S3_ENDPOINT') as string;
 
     this.s3Client = new S3Client({
-      endpoint: this.configService.get('S3_ENDPOINT') as string,
+      endpoint: this.s3Endpoint,
       region: this.configService.get('S3_REGION') as string,
       credentials: {
         accessKeyId: this.configService.get('S3_ACCESS_KEY') as string,
@@ -30,49 +42,60 @@ export class StorageService implements OnModuleInit {
     });
   }
 
-  async onModuleInit() {
+  async onModuleInit(): Promise<void> {
     await this.ensureBucketExists();
   }
 
-  private async ensureBucketExists() {
+  /**
+   * Ensure the S3 bucket exists, create if it doesn't
+   */
+  private async ensureBucketExists(): Promise<void> {
     try {
       await this.s3Client.send(
         new HeadBucketCommand({ Bucket: this.bucketName }),
       );
-      console.log(`✅ S3 bucket "${this.bucketName}" exists`);
+      this.logger.log(`✅ S3 bucket "${this.bucketName}" exists`);
     } catch (error) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       if (error.name === 'NotFound') {
-        console.log(`📦 Creating S3 bucket "${this.bucketName}"...`);
+        this.logger.log(`📦 Creating S3 bucket "${this.bucketName}"...`);
         await this.s3Client.send(
           new CreateBucketCommand({ Bucket: this.bucketName }),
         );
-        console.log(`✅ S3 bucket "${this.bucketName}" created`);
+        this.logger.log(`✅ S3 bucket "${this.bucketName}" created`);
       } else {
-        console.error('Error checking bucket:', error);
+        this.logger.error('Error checking bucket:', error);
+        throw error;
       }
     }
   }
 
-  async generateUploadUrl(
-    fileName: string,
+  /**
+   * Generate a presigned URL for client-side upload
+   * @param fileKey - The S3 object key (path) where file will be stored
+   * @param contentType - MIME type of the file
+   * @param expiresIn - URL expiration time in seconds (default: 5 minutes)
+   */
+  async generatePresignedUploadUrl(
+    fileKey: string,
     contentType: string,
-    expiresIn = 300, // 5 minutes
-  ): Promise<{ uploadUrl: string; fileKey: string }> {
-    // Generate unique file key
-    const fileKey = this.generateFileKey(fileName);
-
+    expiresIn = 300,
+  ): Promise<string> {
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
       Key: fileKey,
       ContentType: contentType,
     });
 
-    const uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn });
-
-    return { uploadUrl, fileKey };
+    return await getSignedUrl(this.s3Client, command, { expiresIn });
   }
 
-  async generateDownloadUrl(
+  /**
+   * Generate a presigned URL for downloading/viewing a file
+   * @param fileKey - The S3 object key (path) of the file
+   * @param expiresIn - URL expiration time in seconds (default: 1 hour)
+   */
+  async generatePresignedDownloadUrl(
     fileKey: string,
     expiresIn = 3600,
   ): Promise<string> {
@@ -84,11 +107,17 @@ export class StorageService implements OnModuleInit {
     return await getSignedUrl(this.s3Client, command, { expiresIn });
   }
 
-  async uploadFile(
+  /**
+   * Upload a file directly from a buffer (server-side upload)
+   * @param fileKey - The S3 object key (path) where file will be stored
+   * @param buffer - File contents as a buffer
+   * @param contentType - MIME type of the file
+   */
+  async uploadBuffer(
     fileKey: string,
     buffer: Buffer,
     contentType: string,
-  ): Promise<string> {
+  ): Promise<void> {
     await this.s3Client.send(
       new PutObjectCommand({
         Bucket: this.bucketName,
@@ -98,9 +127,39 @@ export class StorageService implements OnModuleInit {
       }),
     );
 
-    return this.getPublicUrl(fileKey);
+    this.logger.log(`Uploaded file: ${fileKey}`);
   }
 
+  /**
+   * Download a file as a buffer
+   * @param fileKey - The S3 object key (path) of the file
+   */
+  async downloadBuffer(fileKey: string): Promise<Buffer> {
+    const command = new GetObjectCommand({
+      Bucket: this.bucketName,
+      Key: fileKey,
+    });
+
+    const response = await this.s3Client.send(command);
+    const stream = response.Body as ReadableStream;
+
+    // Convert stream to buffer
+    const chunks: Uint8Array[] = [];
+    const reader = stream.getReader();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+
+    return Buffer.concat(chunks);
+  }
+
+  /**
+   * Delete a file from storage
+   * @param fileKey - The S3 object key (path) of the file to delete
+   */
   async deleteFile(fileKey: string): Promise<void> {
     await this.s3Client.send(
       new DeleteObjectCommand({
@@ -108,17 +167,31 @@ export class StorageService implements OnModuleInit {
         Key: fileKey,
       }),
     );
+
+    this.logger.log(`Deleted file: ${fileKey}`);
   }
 
+  /**
+   * Get the public URL for a file (works if bucket has public read policy)
+   * For private buckets, use generatePresignedDownloadUrl instead
+   * @param fileKey - The S3 object key (path) of the file
+   */
   getPublicUrl(fileKey: string): string {
-    const endpoint = this.configService.get('S3_ENDPOINT') as string;
-    return `${endpoint}/${this.bucketName}/${fileKey}`;
+    return `${this.s3Endpoint}/${this.bucketName}/${fileKey}`;
   }
 
-  private generateFileKey(originalFileName: string): string {
-    const timestamp = Date.now();
-    const randomString = crypto.randomBytes(8).toString('hex');
-    const extension = originalFileName.split('.').pop();
-    return `uploads/${timestamp}-${randomString}.${extension}`;
+  /**
+   * Check if a file exists in storage
+   * @param fileKey - The S3 object key (path) of the file
+   */
+  async fileExists(fileKey: string): Promise<boolean> {
+    try {
+      await this.s3Client.send(
+        new HeadBucketCommand({ Bucket: this.bucketName }),
+      );
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

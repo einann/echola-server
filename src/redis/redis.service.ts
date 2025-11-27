@@ -1,6 +1,12 @@
+// src/redis/redis.service.ts
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import {
+  RedisConversationEvent,
+  QueuedMessage,
+  UploadMetadata,
+} from './types/redis-data.types';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -85,10 +91,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ============================================
-  // Undelivered Message Inbox (ZSET)
+  // Undelivered Message Inbox (ZSET) - TYPED
   // ============================================
 
-  async addToInbox(userId: string, message: any): Promise<void> {
+  async addToInbox(userId: string, message: QueuedMessage): Promise<void> {
     const key = `inbox:${userId}`;
     const score = Date.now(); // timestamp as score
     await this.client.zadd(key, score, JSON.stringify(message));
@@ -96,10 +102,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.expire(key, 7 * 24 * 60 * 60);
   }
 
-  async getInboxMessages(userId: string, limit = 100): Promise<any[]> {
+  async getInboxMessages(
+    userId: string,
+    limit = 100,
+  ): Promise<QueuedMessage[]> {
     const key = `inbox:${userId}`;
     const messages = await this.client.zrange(key, 0, limit - 1);
-    return messages.map((msg) => JSON.parse(msg));
+    return messages.map((msg) => JSON.parse(msg) as QueuedMessage);
   }
 
   async removeFromInbox(userId: string, messageId: string): Promise<void> {
@@ -107,7 +116,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     const messages = await this.client.zrange(key, 0, -1);
 
     for (const msg of messages) {
-      const parsed = JSON.parse(msg);
+      const parsed = JSON.parse(msg) as QueuedMessage;
       if (parsed.id === messageId) {
         await this.client.zrem(key, msg);
         break;
@@ -121,22 +130,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ============================================
-  // Message Caching
+  // Message Caching - TYPED
   // ============================================
 
   async cacheConversationMessages(
     conversationId: string,
-    messages: any[],
+    messages: QueuedMessage[],
     ttl = 3600,
   ): Promise<void> {
     const key = `conversation:${conversationId}:messages`;
     await this.client.setex(key, ttl, JSON.stringify(messages));
   }
 
-  async getCachedMessages(conversationId: string): Promise<any[] | null> {
+  async getCachedMessages(
+    conversationId: string,
+  ): Promise<QueuedMessage[] | null> {
     const key = `conversation:${conversationId}:messages`;
     const cached = await this.client.get(key);
-    return cached ? JSON.parse(cached) : null;
+    return cached ? (JSON.parse(cached) as QueuedMessage[]) : null;
   }
 
   async invalidateConversationCache(conversationId: string): Promise<void> {
@@ -160,7 +171,35 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ============================================
-  // Pub/Sub for Multi-Server Communication
+  // File Upload Metadata - TYPED
+  // ============================================
+
+  async setUploadMetadata(
+    userId: string,
+    fileKey: string,
+    metadata: UploadMetadata,
+    ttl = 300,
+  ): Promise<void> {
+    const key = `upload:${userId}:${fileKey}`;
+    await this.client.setex(key, ttl, JSON.stringify(metadata));
+  }
+
+  async getUploadMetadata(
+    userId: string,
+    fileKey: string,
+  ): Promise<UploadMetadata | null> {
+    const key = `upload:${userId}:${fileKey}`;
+    const data = await this.client.get(key);
+    return data ? (JSON.parse(data) as UploadMetadata) : null;
+  }
+
+  async deleteUploadMetadata(userId: string, fileKey: string): Promise<void> {
+    const key = `upload:${userId}:${fileKey}`;
+    await this.client.del(key);
+  }
+
+  // ============================================
+  // Pub/Sub for Multi-Server Communication - TYPED
   // ============================================
 
   getPubClient(): Redis {
@@ -171,18 +210,47 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.subClient;
   }
 
-  async publish(channel: string, message: any): Promise<void> {
+  async publish(
+    channel: string,
+    message: RedisConversationEvent,
+  ): Promise<void> {
     await this.pubClient.publish(channel, JSON.stringify(message));
   }
 
   async subscribe(
     channel: string,
-    callback: (message: any) => void,
+    callback: (message: RedisConversationEvent) => void,
   ): Promise<void> {
     await this.subClient.subscribe(channel);
     this.subClient.on('message', (chan, msg) => {
       if (chan === channel) {
-        callback(JSON.parse(msg));
+        try {
+          const parsed = JSON.parse(msg) as RedisConversationEvent;
+          callback(parsed);
+        } catch (error) {
+          console.error('Error parsing Redis message:', error);
+        }
+      }
+    });
+  }
+
+  // ============================================
+  // Pattern Subscription (for wildcard channels)
+  // ============================================
+
+  async psubscribe(
+    pattern: string,
+    callback: (channel: string, message: RedisConversationEvent) => void,
+  ): Promise<void> {
+    await this.subClient.psubscribe(pattern);
+    this.subClient.on('pmessage', (pat, chan, msg) => {
+      if (pat === pattern) {
+        try {
+          const parsed = JSON.parse(msg) as RedisConversationEvent;
+          callback(chan, parsed);
+        } catch (error) {
+          console.error('Error parsing Redis pmessage:', error);
+        }
       }
     });
   }
