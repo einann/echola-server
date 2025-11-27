@@ -28,15 +28,15 @@ export class StorageService implements OnModuleInit {
   private s3Endpoint: string;
 
   constructor(private configService: ConfigService) {
-    this.bucketName = this.configService.get('S3_BUCKET_NAME') as string;
-    this.s3Endpoint = this.configService.get('S3_ENDPOINT') as string;
+    this.bucketName = this.configService.getOrThrow<string>('S3_BUCKET_NAME');
+    this.s3Endpoint = this.configService.getOrThrow<string>('S3_ENDPOINT');
 
     this.s3Client = new S3Client({
       endpoint: this.s3Endpoint,
-      region: this.configService.get('S3_REGION') as string,
+      region: this.configService.getOrThrow<string>('S3_REGION'),
       credentials: {
-        accessKeyId: this.configService.get('S3_ACCESS_KEY') as string,
-        secretAccessKey: this.configService.get('S3_SECRET_KEY') as string,
+        accessKeyId: this.configService.getOrThrow<string>('S3_ACCESS_KEY'),
+        secretAccessKey: this.configService.getOrThrow<string>('S3_SECRET_KEY'),
       },
       forcePathStyle: true, // Required for MinIO
     });

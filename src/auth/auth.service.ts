@@ -252,7 +252,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION') as string,
+      expiresIn: this.configService.getOrThrow<string>('JWT_ACCESS_EXPIRATION'),
     };
   }
 

@@ -11,7 +11,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
   constructor(private configService: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: configService.get('JWT_REFRESH_SECRET') as string,
+      secretOrKey: configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
       ignoreExpiration: false,
     });
   }

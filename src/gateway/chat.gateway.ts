@@ -99,7 +99,7 @@ export class ChatGateway
 
       // Verify JWT token
       const payload = this.jwtService.verify<JwtPayload>(token, {
-        secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
       });
 
       const userId = payload.sub;
