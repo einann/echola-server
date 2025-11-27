@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ConversationType } from '@prisma/client';
+import { ConversationType } from 'generated/prisma/client';
 
 @Injectable()
 export class GroupManagementService {

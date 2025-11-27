@@ -6,6 +6,7 @@ import { StorageController } from './storage.controller';
 import { MessagesModule } from '../messages/messages.module';
 import { StorageHandler } from './storage.handler';
 import { StorageValidationService } from './storage-validation.service';
+import { StorageOrchestrationService } from './storage-orchestration.service';
 
 @Module({
   imports: [ConfigModule, MessagesModule],
@@ -13,12 +14,14 @@ import { StorageValidationService } from './storage-validation.service';
   providers: [
     StorageService,
     StorageHandler,
+    StorageOrchestrationService,
     StorageValidationService,
     FileProcessorService,
   ],
   exports: [
     StorageService,
     StorageHandler,
+    StorageOrchestrationService,
     StorageValidationService,
     FileProcessorService,
   ],

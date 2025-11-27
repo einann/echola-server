@@ -66,7 +66,7 @@ export class GroupsHandler {
 
       // Publish to Redis
       await this.redisService.publish(`conversation:${data.conversationId}`, {
-        type: 'members_added',
+        type: 'member_added',
         members: result.addedMembers,
         addedBy: userId,
       });

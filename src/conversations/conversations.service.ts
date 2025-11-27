@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
-import { ConversationType } from '@prisma/client';
+import { ConversationType } from 'generated/prisma/client';
 
 @Injectable()
 export class ConversationsService {

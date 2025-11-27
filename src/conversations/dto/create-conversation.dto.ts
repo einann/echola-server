@@ -6,7 +6,7 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
-import { ConversationType } from '@prisma/client';
+import { ConversationType } from 'generated/prisma/client';
 
 export class CreateConversationDto {
   @IsEnum(ConversationType)
