@@ -31,9 +31,10 @@ async function bootstrap() {
   await redisIoAdapter.connectToRedis();
   app.useWebSocketAdapter(redisIoAdapter);
 
-  const port = (configService.get('PORT') as number) || 3000;
+  const port = configService.get<number>('PORT') || 3000;
   await app.listen(port);
   console.log(`🚀 Echola backend is running on: http://localhost:${port}`);
   console.log(`🔌 WebSocket server is running on: ws://localhost:${port}/chat`);
 }
-bootstrap();
+
+void bootstrap();
