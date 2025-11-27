@@ -7,8 +7,11 @@ import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { MessagesModule } from './messages/messages.module';
-import { ChatModule } from './chat/chat.module';
 import { StorageModule } from './storage/storage.module';
+import { ConnectionModule } from './connection/connection.module';
+import { GatewayModule } from './gateway/gateway.module';
+import { PresenceModule } from './presence/presence.module';
+import { SocketModule } from './socket/socket.module';
 
 @Module({
   imports: [
@@ -16,12 +19,15 @@ import { StorageModule } from './storage/storage.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    AuthModule,
+    ConnectionModule,
+    ConversationsModule,
+    GatewayModule,
+    MessagesModule,
+    PresenceModule,
     PrismaModule,
     RedisModule,
-    AuthModule,
-    ConversationsModule,
-    MessagesModule,
-    ChatModule,
+    SocketModule,
     StorageModule,
   ],
   controllers: [AppController],
