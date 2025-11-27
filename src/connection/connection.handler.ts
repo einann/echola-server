@@ -5,6 +5,14 @@ import { SocketService } from '../socket/socket.service';
 import { MessagesService } from '../messages/messages.service';
 import { AuthenticatedSocket } from '../gateway/types/socket.types';
 
+/**
+  For connection/disconnection handlers specifically, keep defensive try-catch because:
+
+  These are critical paths that shouldn't fail silently
+  Failed connections need immediate feedback
+  User disconnections should be graceful even if cleanup fails
+ */
+
 @Injectable()
 export class ConnectionHandler {
   constructor(

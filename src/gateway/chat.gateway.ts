@@ -9,7 +9,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UsePipes, ValidationPipe } from '@nestjs/common';
+import { UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthenticatedSocket, SocketData } from './types/socket.types';
@@ -44,7 +44,8 @@ import {
   MessageReadEvent,
 } from '../messages/dto/message-status-events.dto';
 import { JwtPayload } from './types/jwt.types';
-import { RedisConversationEvent } from 'src/redis/types/redis-data.types';
+import { RedisConversationEvent } from '../redis/types/redis-data.types';
+import { AllWsExceptionsFilter } from '../common/filters/ws-exception.filter';
 
 @WebSocketGateway({
   cors: {
@@ -54,6 +55,7 @@ import { RedisConversationEvent } from 'src/redis/types/redis-data.types';
   namespace: '/chat',
 })
 @UsePipes(new ValidationPipe())
+@UseFilters(new AllWsExceptionsFilter())
 export class ChatGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {

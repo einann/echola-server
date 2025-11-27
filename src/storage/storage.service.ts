@@ -1,4 +1,3 @@
-// src/storage/storage.service.ts
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -148,6 +147,7 @@ export class StorageService implements OnModuleInit {
     const reader = stream.getReader();
 
     while (true) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
@@ -180,18 +180,18 @@ export class StorageService implements OnModuleInit {
     return `${this.s3Endpoint}/${this.bucketName}/${fileKey}`;
   }
 
-  /**
-   * Check if a file exists in storage
-   * @param fileKey - The S3 object key (path) of the file
-   */
-  async fileExists(fileKey: string): Promise<boolean> {
-    try {
-      await this.s3Client.send(
-        new HeadBucketCommand({ Bucket: this.bucketName }),
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }
+  // /**
+  //  * Check if a file exists in storage
+  //  * @param fileKey - The S3 object key (path) of the file
+  //  */
+  // async fileExists(fileKey: string): Promise<boolean> {
+  //   try {
+  //     await this.s3Client.send(
+  //       new HeadBucketCommand({ Bucket: this.bucketName }),
+  //     );
+  //     return true;
+  //   } catch {
+  //     return false;
+  //   }
+  // }
 }

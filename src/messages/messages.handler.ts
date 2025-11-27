@@ -22,143 +22,116 @@ export class MessagesHandler {
   async sendMessage(
     client: AuthenticatedSocket,
     data: SendMessageEvent,
-  ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    try {
-      const userId = client.data.userId;
+  ): Promise<void> {
+    const userId = client.data.userId;
 
-      // Send message via service (saves to DB)
-      const message = await this.messagesService.sendMessage(userId, data);
+    // Send message via service (saves to DB)
+    const message = await this.messagesService.sendMessage(userId, data);
 
-      // Immediately acknowledge to sender
-      client.emit('message_sent', {
-        tempId: data['tempId'] as string,
-        message,
+    // Immediately acknowledge to sender
+    client.emit('message_sent', {
+      tempId: data['tempId'] as string,
+      message,
+    });
+
+    // Get conversation participants
+    const participants =
+      await this.prismaService.conversationParticipant.findMany({
+        where: {
+          conversationId: data.conversationId,
+          userId: { not: userId },
+          leftAt: null,
+        },
       });
 
-      // Get conversation participants
-      const participants =
-        await this.prismaService.conversationParticipant.findMany({
-          where: {
-            conversationId: data.conversationId,
-            userId: { not: userId },
-            leftAt: null,
-          },
-        });
+    // Invalidate conversation cache
+    await this.redisService.invalidateConversationCache(data.conversationId);
 
-      // Invalidate conversation cache
-      await this.redisService.invalidateConversationCache(data.conversationId);
+    // Deliver to online recipients via WebSocket
+    for (const participant of participants) {
+      const isOnline = await this.redisService.isUserOnline(participant.userId);
 
-      // Deliver to online recipients via WebSocket
-      for (const participant of participants) {
-        const isOnline = await this.redisService.isUserOnline(
+      if (isOnline) {
+        // Deliver via WebSocket
+        this.socketService.emitToUser(
           participant.userId,
+          'new_message',
+          message,
         );
 
-        if (isOnline) {
-          // Deliver via WebSocket
-          this.socketService.emitToUser(
-            participant.userId,
-            'new_message',
-            message,
-          );
+        // Auto-mark as delivered after 1 second
+        setTimeout(() => {
+          void (async () => {
+            await this.messagesService.markMessageAsDelivered(
+              participant.userId,
+              message.id,
+            );
 
-          // Auto-mark as delivered after 1 second
-          setTimeout(() => {
-            void (async () => {
-              await this.messagesService.markMessageAsDelivered(
-                participant.userId,
-                message.id,
-              );
-
-              // Notify sender of delivery
-              this.socketService.emitToUser(userId, 'message_delivered', {
-                messageId: message.id,
-                userId: participant.userId,
-                deliveredAt: new Date(),
-              });
-            })();
-          }, 1000);
-        } else {
-          // User offline: add to Redis inbox
-          await this.redisService.addToInbox(participant.userId, message);
-        }
+            // Notify sender of delivery
+            this.socketService.emitToUser(userId, 'message_delivered', {
+              messageId: message.id,
+              userId: participant.userId,
+              deliveredAt: new Date(),
+            });
+          })();
+        }, 1000);
+      } else {
+        // User offline: add to Redis inbox
+        await this.redisService.addToInbox(participant.userId, message);
       }
-
-      // Publish to Redis for other server instances
-      await this.redisService.publish(`conversation:${data.conversationId}`, {
-        type: 'new_message',
-        message,
-        senderId: userId,
-      });
-
-      return { success: true, messageId: message.id };
-    } catch (error) {
-      console.error('Error sending message:', error);
-      client.emit('error', {
-        message: 'Failed to send message',
-        error: error.message,
-      });
-      return { success: false, error: error.message };
     }
+
+    // Publish to Redis for other server instances
+    await this.redisService.publish(`conversation:${data.conversationId}`, {
+      type: 'new_message',
+      message,
+      senderId: userId,
+    });
   }
 
   async markDelivered(
     client: AuthenticatedSocket,
     data: MessageDeliveredEvent,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const userId = client.data.userId;
+  ): Promise<void> {
+    const userId = client.data.userId;
 
-      await this.messagesService.markMessageAsDelivered(userId, data.messageId);
+    await this.messagesService.markMessageAsDelivered(userId, data.messageId);
 
-      // Get message to find sender
-      const message = await this.prismaService.message.findUnique({
-        where: { id: data.messageId },
+    // Get message to find sender
+    const message = await this.prismaService.message.findUnique({
+      where: { id: data.messageId },
+    });
+
+    if (message) {
+      // Notify sender
+      this.socketService.emitToUser(message.senderId, 'message_delivered', {
+        messageId: data.messageId,
+        userId,
+        deliveredAt: new Date(),
       });
-
-      if (message) {
-        // Notify sender
-        this.socketService.emitToUser(message.senderId, 'message_delivered', {
-          messageId: data.messageId,
-          userId,
-          deliveredAt: new Date(),
-        });
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error marking message as delivered:', error);
-      return { success: false, error: error.message };
     }
   }
 
   async markRead(
     client: AuthenticatedSocket,
     data: MessageReadEvent,
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const userId = client.data.userId;
+  ): Promise<void> {
+    const userId = client.data.userId;
 
-      await this.messagesService.markMessageAsRead(userId, data.messageId);
+    await this.messagesService.markMessageAsRead(userId, data.messageId);
 
-      // Get message to find sender
-      const message = await this.prismaService.message.findUnique({
-        where: { id: data.messageId },
+    // Get message to find sender
+    const message = await this.prismaService.message.findUnique({
+      where: { id: data.messageId },
+    });
+
+    if (message) {
+      // Notify sender
+      this.socketService.emitToUser(message.senderId, 'message_read', {
+        messageId: data.messageId,
+        userId,
+        readAt: new Date(),
       });
-
-      if (message) {
-        // Notify sender
-        this.socketService.emitToUser(message.senderId, 'message_read', {
-          messageId: data.messageId,
-          userId,
-          readAt: new Date(),
-        });
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error('Error marking message as read:', error);
-      return { success: false, error: error.message };
     }
   }
 }
