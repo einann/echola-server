@@ -3,9 +3,13 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ConversationType } from 'generated/prisma/client';
+import {
+  ConversationParticipant,
+  ConversationType,
+} from 'generated/prisma/client';
 
 @Injectable()
 export class GroupManagementService {
@@ -92,8 +96,8 @@ export class GroupManagementService {
       throw new NotFoundException('One or more users not found');
     }
 
-    // Check if any users are already participants
-    const existingParticipants =
+    // Check which users are currently active participants
+    const activeParticipants =
       await this.prisma.conversationParticipant.findMany({
         where: {
           conversationId,
@@ -102,21 +106,48 @@ export class GroupManagementService {
         },
       });
 
-    if (existingParticipants.length > 0) {
-      const existingUserIds = existingParticipants.map((p) => p.userId);
-      throw new BadRequestException(
-        `Users already in group: ${existingUserIds.join(', ')}`,
+    if (activeParticipants.length > 0) {
+      const activeUserIds = activeParticipants.map((p) => p.userId);
+      throw new ConflictException(
+        `Users already in group: ${activeUserIds.join(', ')}`,
       );
     }
 
-    // Add users as members
-    const newParticipants = await this.prisma.$transaction(
-      userIds.map((userId) =>
-        this.prisma.conversationParticipant.create({
-          data: {
+    // Find users who previously left (to re-add them)
+    const previousParticipants =
+      await this.prisma.conversationParticipant.findMany({
+        where: {
+          conversationId,
+          userId: { in: userIds },
+          leftAt: { not: null },
+        },
+      });
+
+    const previousUserIds = previousParticipants.map((p) => p.userId);
+    const newUserIds = userIds.filter((id) => !previousUserIds.includes(id));
+
+    // Perform operations in transaction
+    const newParticipants = await this.prisma.$transaction(async (tx) => {
+      const results: ConversationParticipant[] = [];
+
+      // Re-add users who previously left (update leftAt to null)
+      if (previousUserIds.length > 0) {
+        await tx.conversationParticipant.updateMany({
+          where: {
             conversationId,
-            userId,
+            userId: { in: previousUserIds },
+          },
+          data: {
+            leftAt: null,
             role: 'member',
+          },
+        });
+
+        // Fetch the updated records to return
+        const updatedParticipants = await tx.conversationParticipant.findMany({
+          where: {
+            conversationId,
+            userId: { in: previousUserIds },
           },
           include: {
             user: {
@@ -129,11 +160,43 @@ export class GroupManagementService {
               },
             },
           },
-        }),
-      ),
-    );
+        });
 
-    // Get conversation details for the response
+        results.push(...updatedParticipants);
+      }
+
+      // Add genuinely new users
+      if (newUserIds.length > 0) {
+        const created = await Promise.all(
+          newUserIds.map((userId) =>
+            tx.conversationParticipant.create({
+              data: {
+                conversationId,
+                userId,
+                role: 'member',
+              },
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    displayName: true,
+                    username: true,
+                    avatarUrl: true,
+                    email: true,
+                  },
+                },
+              },
+            }),
+          ),
+        );
+
+        results.push(...created);
+      }
+
+      return results;
+    });
+
+    // Get conversation details
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       select: {
@@ -145,6 +208,8 @@ export class GroupManagementService {
 
     return {
       conversation,
+      // @ts-expect-error 'TODO'
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       addedMembers: newParticipants.map((p) => p.user),
       addedBy: adminId,
     };
