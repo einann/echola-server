@@ -35,6 +35,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ============================================
+  // Client Methods
+  // ============================================
+  public getClient() {
+    return this.client;
+  }
+
+  // ============================================
   // Basic Key-Value Operations
   // ============================================
 

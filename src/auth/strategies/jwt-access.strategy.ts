@@ -4,6 +4,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RedisService } from '../../redis/redis.service';
+import { Request } from 'express';
 
 @Injectable()
 export class JwtAccessStrategy extends PassportStrategy(
@@ -19,10 +20,11 @@ export class JwtAccessStrategy extends PassportStrategy(
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
       ignoreExpiration: false,
+      passReqToCallback: true,
     });
   }
 
-  async validate(payload: { sub: string; deviceId: string }) {
+  async validate(req: Request, payload: { sub: string; deviceId: string }) {
     const { sub: userId, deviceId } = payload;
 
     // Check if session exists in Redis (quick check)
@@ -57,6 +59,9 @@ export class JwtAccessStrategy extends PassportStrategy(
       where: { id: user.devices[0].id },
       data: { lastActiveAt: new Date() },
     });
+
+    req.userId = payload.sub;
+    req.deviceId = payload.deviceId;
 
     // Return user info to be attached to request
     return {
