@@ -31,7 +31,7 @@ export class LoggingMiddleware implements NestMiddleware {
         statusCode,
         responseTime,
         requestId,
-        req.userId, // Will be undefined if not authenticated
+        req.userId,
       );
     });
 

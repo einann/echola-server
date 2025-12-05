@@ -7,58 +7,44 @@ import {
 import { Request, Response, NextFunction } from 'express';
 import { RedisService } from '../../redis/redis.service';
 
-interface RateLimitConfig {
-  windowMs: number; // Time window in milliseconds
-  maxRequests: number; // Max requests per window
-  message?: string;
-  skipSuccessfulRequests?: boolean;
-}
-
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
-  private config: RateLimitConfig;
-
-  constructor(private redisService: RedisService) {
-    // Default configuration
-    this.config = {
-      windowMs: 60 * 1000, // 1 minute
-      maxRequests: 100, // 100 requests per minute
-      message: 'Too many requests, please try again later',
-      skipSuccessfulRequests: false,
-    };
-  }
-
-  // Allow configuration per route
-  configure(config: Partial<RateLimitConfig>) {
-    this.config = { ...this.config, ...config };
-    return this;
-  }
+  constructor(private redisService: RedisService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
-      // Use IP + userId (if authenticated) as the key
-      const identifier = this.getIdentifier(req);
-      const key = `ratelimit:http:${identifier}`;
+      const path = this.getCleanPath(req.originalUrl);
 
-      // Use sliding window algorithm with Redis
-      const current = await this.checkRateLimit(key);
+      // Get rate limit config based on route
+      const config = this.getRateLimitConfig(path);
+
+      // Skip rate limiting for health checks
+      if (path === '/health' || path === '/') {
+        return next();
+      }
+
+      const identifier = this.getIdentifier(req);
+      const key = `ratelimit:http:${identifier}:${this.getRouteKey(path)}`;
+
+      // Check rate limit
+      const current = await this.checkRateLimit(key, config.windowMs);
 
       // Set rate limit headers
-      res.setHeader('X-RateLimit-Limit', this.config.maxRequests);
+      res.setHeader('X-RateLimit-Limit', config.maxRequests);
       res.setHeader(
         'X-RateLimit-Remaining',
-        Math.max(0, this.config.maxRequests - current),
+        Math.max(0, config.maxRequests - current),
       );
-      res.setHeader('X-RateLimit-Reset', Date.now() + this.config.windowMs);
+      res.setHeader('X-RateLimit-Reset', Date.now() + config.windowMs);
 
-      if (current > this.config.maxRequests) {
-        const retryAfter = Math.ceil(this.config.windowMs / 1000);
+      if (current > config.maxRequests) {
+        const retryAfter = Math.ceil(config.windowMs / 1000);
         res.setHeader('Retry-After', retryAfter);
 
         throw new HttpException(
           {
             statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: this.config.message,
+            message: config.message,
             retryAfter,
           },
           HttpStatus.TOO_MANY_REQUESTS,
@@ -76,6 +62,42 @@ export class RateLimitMiddleware implements NestMiddleware {
     }
   }
 
+  private getCleanPath(originalUrl: string): string {
+    // Remove query string if present
+    // /auth/login?redirect=/dashboard -> /auth/login
+    return originalUrl.split('?')[0];
+  }
+
+  private getRateLimitConfig(path: string) {
+    // Stricter limits for auth endpoints
+    if (path.includes('/auth/login') || path.includes('/auth/register')) {
+      return {
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        maxRequests: 5,
+        message: 'Too many authentication attempts, please try again later',
+      };
+    }
+
+    // Moderate limits for file uploads
+    if (
+      path.includes('/storage/upload') ||
+      path.includes('/storage/presigned-url')
+    ) {
+      return {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        maxRequests: 50,
+        message: 'Upload limit reached, please try again later',
+      };
+    }
+
+    // Default limits for all other endpoints
+    return {
+      windowMs: 60 * 1000, // 1 minute
+      maxRequests: 100,
+      message: 'Too many requests, please try again later',
+    };
+  }
+
   private getIdentifier(req: Request): string {
     // Prefer userId for authenticated requests
     if (req.userId) {
@@ -87,7 +109,18 @@ export class RateLimitMiddleware implements NestMiddleware {
     return `ip:${ip}`;
   }
 
-  private async checkRateLimit(key: string): Promise<number> {
+  private getRouteKey(path: string): string {
+    // Normalize route (remove dynamic params)
+    // /conversations/123/messages -> /conversations/:id/messages
+    return path
+      .split('/')
+      .map((segment) =>
+        segment.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/i) ? ':id' : segment,
+      )
+      .join('/');
+  }
+
+  private async checkRateLimit(key: string, windowMs: number): Promise<number> {
     const redis = this.redisService.getClient();
 
     // Increment counter
@@ -95,19 +128,9 @@ export class RateLimitMiddleware implements NestMiddleware {
 
     // Set expiry on first request
     if (current === 1) {
-      await redis.pexpire(key, this.config.windowMs);
+      await redis.pexpire(key, windowMs);
     }
 
     return current;
   }
-}
-
-// Factory function for different rate limits per route
-export function createRateLimitMiddleware(
-  redisService: RedisService,
-  config: Partial<RateLimitConfig>,
-): NestMiddleware {
-  const middleware = new RateLimitMiddleware(redisService);
-  middleware.configure(config);
-  return middleware;
 }

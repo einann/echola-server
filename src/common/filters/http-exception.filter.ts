@@ -45,7 +45,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     request: Request,
   ): ErrorResponse {
     const timestamp = new Date().toISOString();
-    const path = request.url;
+    const path = request.originalUrl;
     const requestId = request.requestId || 'unknown';
 
     // Handle Prisma errors
