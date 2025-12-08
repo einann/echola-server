@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Catch, ArgumentsHost, HttpException } from '@nestjs/common';
+import { Catch, ArgumentsHost, HttpException, Inject } from '@nestjs/common';
 import { BaseWsExceptionFilter } from '@nestjs/websockets';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Socket } from 'socket.io';
+import { Logger } from 'nestjs-pino';
 
 interface ErrorResponse {
   message: string;
@@ -14,7 +15,10 @@ interface ErrorResponse {
 
 @Catch()
 export class AllWsExceptionsFilter extends BaseWsExceptionFilter {
-  constructor(private configService?: ConfigService) {
+  constructor(
+    @Inject(Logger) private readonly logger?: Logger,
+    private configService?: ConfigService,
+  ) {
     super();
   }
 
@@ -136,46 +140,37 @@ export class AllWsExceptionsFilter extends BaseWsExceptionFilter {
   }
 
   private logError(exception: unknown, userId?: string, eventData?: any) {
-    const isDevelopment = this.configService?.get('NODE_ENV') === 'development';
-
-    const errorInfo = {
-      timestamp: new Date().toISOString(),
-      userId,
+    const errorContext = {
+      context: 'websocket',
+      userId: userId || 'anonymous',
       event: eventData?.event || 'unknown',
       conversationId: eventData?.conversationId,
     };
 
-    // In development, log full details
-    if (isDevelopment) {
-      console.error('WebSocket error (DEV):', {
-        ...errorInfo,
-        error:
-          exception instanceof Error
-            ? {
-                name: exception.name,
-                message: exception.message,
-                stack: exception.stack,
-              }
-            : exception,
-        eventData,
-      });
+    if (exception instanceof Error) {
+      this.logger?.error(
+        {
+          ...errorContext,
+          err: exception, // Pino auto-serializes errors with stack traces
+        },
+        `WebSocket error: ${exception.message}`,
+      );
+    } else if (exception instanceof PrismaClientKnownRequestError) {
+      this.logger?.error(
+        {
+          ...errorContext,
+          prismaCode: exception.code,
+        },
+        'WebSocket Prisma error',
+      );
     } else {
-      // In production, log minimal info (no stack traces to console)
-      console.error('WebSocket error:', {
-        ...errorInfo,
-        errorType: exception instanceof Error ? exception.name : 'Unknown',
-        errorCode:
-          exception instanceof PrismaClientKnownRequestError
-            ? exception.code
-            : 'N/A',
-      });
-
-      // Send to monitoring service (Sentry, DataDog, etc.)
-      // this.monitoringService.captureException(exception, {
-      //   context: 'websocket',
-      //   userId,
-      //   eventData,
-      // });
+      this.logger?.error(
+        {
+          ...errorContext,
+          exception,
+        },
+        'WebSocket unknown error',
+      );
     }
   }
 }

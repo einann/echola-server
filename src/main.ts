@@ -6,9 +6,13 @@ import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
+import { Logger } from 'nestjs-pino';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Use pino instead of default NestJS logger
+  app.useLogger(app.get(Logger));
 
   // Get config service
   const configService = app.get(ConfigService);
@@ -84,9 +88,10 @@ async function bootstrap() {
   const port = configService.get<number>('PORT') || 3000;
   await app.listen(port);
 
-  console.log(`🚀 Echola backend is running on: http://localhost:${port}`);
-  console.log(`🔌 WebSocket server is running on: ws://localhost:${port}/chat`);
-  console.log(`📝 Environment: ${configService.get('NODE_ENV')}`);
+  const logger = app.get(Logger);
+  logger.log(`🚀 Echola backend is running on: http://localhost:${port}`);
+  logger.log(`🔌 WebSocket server is running on: ws://localhost:${port}/chat`);
+  logger.log(`📝 Environment: ${configService.get('NODE_ENV')}`);
 }
 
 void bootstrap();

@@ -4,10 +4,12 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Inject,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+import { Logger } from 'nestjs-pino';
 
 interface ErrorResponse {
   success: false;
@@ -23,7 +25,10 @@ interface ErrorResponse {
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  constructor(private configService: ConfigService) {}
+  constructor(
+    private configService: ConfigService,
+    @Inject(Logger) private readonly logger?: Logger,
+  ) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -34,7 +39,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const status = this.getStatus(exception);
 
     // Log error server-side
-    this.logError(exception, request);
+    this.logError(exception, request, status);
 
     // Send sanitized error to client
     response.status(status).json(errorResponse);
@@ -179,49 +184,45 @@ export class HttpExceptionFilter implements ExceptionFilter {
     return statusMap[status] || 'INTERNAL_ERROR';
   }
 
-  private logError(exception: unknown, request: Request) {
-    const isDevelopment = this.configService.get('NODE_ENV') === 'development';
-    const { method, url, requestId, userId, ip } = request;
+  private logError(exception: unknown, request: Request, status: number) {
+    const { method, originalUrl, requestId, userId, ip } = request;
 
-    const errorInfo = {
-      timestamp: new Date().toISOString(),
+    const errorContext = {
       requestId,
       method,
-      url,
+      url: originalUrl,
       userId: userId || 'anonymous',
       ip,
+      statusCode: status,
     };
 
-    if (isDevelopment) {
-      console.error('HTTP Exception (DEV):', {
-        ...errorInfo,
-        error:
-          exception instanceof Error
-            ? {
-                name: exception.name,
-                message: exception.message,
-                stack: exception.stack,
-              }
-            : exception,
-      });
+    if (exception instanceof Error && this.logger) {
+      // Log with stack trace
+      this.logger.error(
+        {
+          ...errorContext,
+          err: exception, // Pino automatically serializes Error objects
+          errorType: exception.name,
+        },
+        exception.message,
+      );
+    } else if (exception instanceof PrismaClientKnownRequestError) {
+      this.logger.error(
+        {
+          ...errorContext,
+          prismaCode: exception.code,
+          prismaMessage: exception.message,
+        },
+        'Prisma database error',
+      );
     } else {
-      // Production: minimal logging
-      console.error('HTTP Exception:', {
-        ...errorInfo,
-        errorType: exception instanceof Error ? exception.name : 'Unknown',
-        errorCode:
-          exception instanceof PrismaClientKnownRequestError
-            ? exception.code
-            : 'N/A',
-      });
-
-      // TODO: Send to monitoring service (Sentry, DataDog, etc.)
-      // this.monitoringService.captureException(exception, {
-      //   context: 'http',
-      //   requestId,
-      //   userId,
-      //   url,
-      // });
+      this.logger.error(
+        {
+          ...errorContext,
+          exception,
+        },
+        'Unknown exception occurred',
+      );
     }
   }
 }

@@ -13,8 +13,8 @@ import { GatewayModule } from './gateway/gateway.module';
 import { PresenceModule } from './presence/presence.module';
 import { SocketModule } from './socket/socket.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
-import { LoggingMiddleware } from './common/middleware/logging.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
+import { LoggerModule } from './common/logger/logger.module';
 
 @Module({
   imports: [
@@ -22,6 +22,7 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    LoggerModule,
     AuthModule,
     ConnectionModule,
     ConversationsModule,
@@ -38,19 +39,10 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    // ================================
-    // APPLY MIDDLEWARE GLOBALLY
-    // ================================
-
-    // 1. Request Context (must be first)
+    // Request Context (must be first)
     consumer.apply(RequestContextMiddleware).forRoutes('*');
-
-    // 2. Logging (after context is set)
-    consumer.apply(LoggingMiddleware).forRoutes('*');
-
-    // 3. Rate limiting (after logging)
     consumer.apply(RateLimitMiddleware).forRoutes('*');
   }
 
-  constructor() {} // Import ModuleRef from @nestjs/core
+  constructor() {}
 }
