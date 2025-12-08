@@ -74,13 +74,28 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
                 remoteAddress: req.remoteAddress,
                 remotePort: req.remotePort,
               }),
-              res: (res) => ({
-                statusCode: res.statusCode,
-                headers: {
-                  'content-type': res.getHeader('content-type'),
-                  'x-request-id': res.getHeader('x-request-id'),
-                },
-              }),
+              res: (res) => {
+                // Create a safe helper to retrieve headers
+                const getHeader = (key: string) => {
+                  // 1. Try standard Node.js method if it exists
+                  if (typeof res.getHeader === 'function') {
+                    return res.getHeader(key);
+                  }
+                  // 2. Try direct property access (common in some mapped objects)
+                  if (res.headers && typeof res.headers === 'object') {
+                    return res.headers[key];
+                  }
+                  return undefined;
+                };
+
+                return {
+                  statusCode: res.statusCode,
+                  headers: {
+                    'content-type': getHeader('content-type'),
+                    'x-request-id': getHeader('x-request-id'),
+                  },
+                };
+              },
             },
 
             // Automatically log all requests

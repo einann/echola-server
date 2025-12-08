@@ -196,9 +196,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
     };
 
-    if (exception instanceof Error && this.logger) {
+    if (exception instanceof Error) {
       // Log with stack trace
-      this.logger.error(
+      this.logger?.error(
         {
           ...errorContext,
           err: exception, // Pino automatically serializes Error objects
@@ -207,7 +207,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         exception.message,
       );
     } else if (exception instanceof PrismaClientKnownRequestError) {
-      this.logger.error(
+      this.logger?.error(
         {
           ...errorContext,
           prismaCode: exception.code,
@@ -216,7 +216,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         'Prisma database error',
       );
     } else {
-      this.logger.error(
+      this.logger?.error(
         {
           ...errorContext,
           exception,
