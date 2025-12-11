@@ -16,6 +16,7 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { LoggerModule } from './common/logger/logger.module';
 import { validate } from './config/env.validation';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { validate } from './config/env.validation';
     ConnectionModule,
     ConversationsModule,
     GatewayModule,
+    HealthModule,
     MessagesModule,
     PresenceModule,
     PrismaModule,

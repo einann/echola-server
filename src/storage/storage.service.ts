@@ -54,6 +54,16 @@ export class StorageService implements OnModuleInit {
     await this.ensureBucketExists();
   }
 
+  public async getBucketExists(bucketName: string): Promise<boolean> {
+    try {
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: bucketName }));
+      return true;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (err) {
+      return false;
+    }
+  }
+
   /**
    * Ensure the S3 bucket exists, create if it doesn't
    */
