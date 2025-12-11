@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Socket } from 'socket.io';
 import { Logger } from 'nestjs-pino';
+import * as Sentry from '@sentry/node';
 
 interface ErrorResponse {
   message: string;
@@ -33,6 +34,8 @@ export class AllWsExceptionsFilter extends BaseWsExceptionFilter {
 
     // Log full error details server-side only
     this.logError(exception, client.data?.userId, data);
+
+    this.sendToSentry(exception, client, data);
   }
 
   private buildErrorResponse(exception: unknown): ErrorResponse {
@@ -172,5 +175,39 @@ export class AllWsExceptionsFilter extends BaseWsExceptionFilter {
         'WebSocket unknown error',
       );
     }
+  }
+
+  private sendToSentry(exception: unknown, client: Socket, eventData: any) {
+    Sentry.withScope((scope) => {
+      // Add WebSocket context
+      scope.setContext('websocket', {
+        event: eventData?.event || 'unknown',
+        conversationId: eventData?.conversationId,
+        socketId: client.id,
+      });
+
+      // Add user context if authenticated
+      if (client.data?.userId) {
+        scope.setUser({
+          id: client.data.userId,
+        });
+      }
+
+      // Add custom tags
+      scope.setTags({
+        context: 'websocket',
+        event: eventData?.event,
+      });
+
+      // Capture the exception
+      if (exception instanceof Error) {
+        Sentry.captureException(exception);
+      } else {
+        Sentry.captureMessage(
+          `WebSocket non-error exception: ${JSON.stringify(exception)}`,
+          'error',
+        );
+      }
+    });
   }
 }

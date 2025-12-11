@@ -7,6 +7,7 @@ import {
   IsUrl,
   validateSync,
   Min,
+  IsOptional,
 } from 'class-validator';
 
 enum Environment {
@@ -95,6 +96,13 @@ export class EnvironmentVariables {
 
   @IsString()
   MINIO_ROOT_PASSWORD: string;
+
+  // ============================================
+  // Sentry DSN
+  // ============================================
+  @IsOptional()
+  @IsString()
+  SENTRY_DSN?: string;
 
   // ============================================
   // File Upload Limits (in bytes)

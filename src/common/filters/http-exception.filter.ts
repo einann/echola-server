@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Logger } from 'nestjs-pino';
 import { EnvironmentVariables } from 'src/config/env.validation';
+import * as Sentry from '@sentry/node';
 
 interface ErrorResponse {
   success: false;
@@ -41,6 +42,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // Log error server-side
     this.logError(exception, request, status);
+
+    // Send to sentry (only 5xx errors and unhandled exceptions)
+    if (status >= 500 || !(exception instanceof HttpException)) {
+      this.sendToSentry(exception, request);
+    }
 
     // Send sanitized error to client
     response.status(status).json(errorResponse);
@@ -225,5 +231,45 @@ export class HttpExceptionFilter implements ExceptionFilter {
         'Unknown exception occurred',
       );
     }
+  }
+
+  private sendToSentry(exception: unknown, request: Request) {
+    Sentry.withScope((scope) => {
+      // Add request context
+      scope.setContext('http', {
+        method: request.method,
+        url: request.originalUrl,
+        headers: {
+          'user-agent': request.headers['user-agent'],
+        },
+        query: request.query,
+        body: request.body,
+      });
+
+      // Add user context if authenticated
+      if (request.userId) {
+        scope.setUser({
+          id: request.userId,
+          ip_address: request.ip,
+        });
+      }
+
+      // Add custom tags
+      scope.setTags({
+        requestId: request.requestId,
+        endpoint: request.originalUrl,
+        method: request.method,
+      });
+
+      // Capture the exception
+      if (exception instanceof Error) {
+        Sentry.captureException(exception);
+      } else {
+        Sentry.captureMessage(
+          `Non-error exception: ${JSON.stringify(exception)}`,
+          'error',
+        );
+      }
+    });
   }
 }
