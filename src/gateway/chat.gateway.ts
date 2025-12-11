@@ -154,6 +154,14 @@ export class ChatGateway
     return this.messagesHandler.markRead(client, data);
   }
 
+  @SubscribeMessage('message_delete')
+  handleMessageDelete(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: MessageReadEvent,
+  ) {
+    return this.messagesHandler.deleteMessage(client, data);
+  }
+
   // ============================================
   // Reaction Events
   // ============================================

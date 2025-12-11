@@ -9,6 +9,7 @@ import {
   MessageDeliveredEvent,
   MessageReadEvent,
 } from './dto/message-status-events.dto';
+import { DeleteMessageDto } from './dto/delete-message.dto';
 
 @Injectable()
 export class MessagesHandler {
@@ -133,5 +134,37 @@ export class MessagesHandler {
         readAt: new Date(),
       });
     }
+  }
+
+  async deleteMessage(
+    client: AuthenticatedSocket,
+    data: DeleteMessageDto,
+  ): Promise<any> {
+    const userId = client.data.userId;
+
+    const result = await this.messagesService.deleteMessage(
+      data.messageId,
+      userId,
+      data.deleteForEveryone,
+    );
+
+    const message = await this.messagesService.getMessageById(data.messageId);
+
+    this.socketService.emitToConversation(
+      message.conversationId,
+      'message_deleted',
+      {
+        messageId: data.messageId,
+        conversationId: message.conversationId,
+        deletedBy: userId,
+        deleteForEveryone: data.deleteForEveryone,
+        deletedAt: result.deletedAt,
+      },
+    );
+
+    // Delete files from storage asynchronously
+    void this.messagesService.deleteMessageFiles(data.messageId);
+
+    return result;
   }
 }

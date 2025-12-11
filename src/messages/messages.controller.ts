@@ -13,6 +13,7 @@ import {
 import { MessagesService } from './messages.service';
 import { SendMessageDto } from '../conversations/dto/send-message.dto';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
+import { DeleteMessageDto } from './dto/delete-message.dto';
 
 @Controller('messages')
 @UseGuards(JwtAccessGuard)
@@ -78,8 +79,16 @@ export class MessagesController {
   }
 
   @Delete(':messageId')
-  async deleteMessage(@Request() req, @Param('messageId') messageId: string) {
-    return this.messagesService.deleteMessage(req.user.userId, messageId);
+  async deleteMessage(
+    @Request() req,
+    @Param('messageId') messageId: string,
+    @Body() dto: DeleteMessageDto,
+  ) {
+    return this.messagesService.deleteMessage(
+      messageId,
+      req.user.id,
+      dto.deleteForEveryone,
+    );
   }
 
   @Get('conversation/:conversationId/unread-count')

@@ -5,9 +5,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ReactionsService } from './reactions.service';
 import { MessagesHandler } from './messages.handler';
 import { ReactionsHandler } from './reactions.handler';
+import { StorageModule } from 'src/storage/storage.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, StorageModule],
   controllers: [MessagesController],
   providers: [
     MessagesService,

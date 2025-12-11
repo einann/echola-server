@@ -3,14 +3,22 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
+
 import { PrismaService } from '../prisma/prisma.service';
 import { SendMessageDto } from '../conversations/dto/send-message.dto';
 import { DeliveryStatus } from 'generated/prisma/client';
+import { StorageService } from 'src/storage/storage.service';
 
 @Injectable()
 export class MessagesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+    @Inject(Logger) private readonly logger: Logger,
+  ) {}
 
   async sendMessage(senderId: string, sendMessageDto: SendMessageDto) {
     const {
@@ -207,6 +215,29 @@ export class MessagesService {
     return messages.reverse();
   }
 
+  async getMessageById(messageId: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      include: {
+        conversation: true,
+        sender: {
+          select: {
+            id: true,
+            displayName: true,
+            username: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    });
+
+    if (!message) {
+      throw new NotFoundException('Message not found');
+    }
+
+    return message;
+  }
+
   async markMessageAsDelivered(userId: string, messageId: string) {
     const messageStatus = await this.prisma.messageStatus.findUnique({
       where: {
@@ -354,28 +385,127 @@ export class MessagesService {
     });
   }
 
-  async deleteMessage(userId: string, messageId: string) {
+  /**
+   * Delete a message (soft delete)
+   * - Sender can always delete their own messages
+   * - Group admins can delete any message in their groups
+   */
+  async deleteMessage(
+    messageId: string,
+    userId: string,
+    deleteForEveryone = false,
+  ) {
+    // Fetch message with conversation details
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
+      include: {
+        conversation: {
+          include: {
+            participants: {
+              where: { userId },
+            },
+          },
+        },
+      },
     });
 
     if (!message) {
       throw new NotFoundException('Message not found');
     }
 
-    if (message.senderId !== userId) {
-      throw new ForbiddenException('You can only delete your own messages');
+    // Check if message is already deleted
+    if (message.isDeleted) {
+      throw new NotFoundException('Message has already been deleted');
     }
 
-    // Soft delete
-    return await this.prisma.message.update({
+    const userParticipant = message.conversation.participants[0];
+
+    if (!userParticipant) {
+      throw new ForbiddenException('You are not a member of this conversation');
+    }
+
+    // Permission checks
+    const isSender = message.senderId === userId;
+    const isAdmin = userParticipant.role === 'admin';
+    const isGroupCreator = message.conversation.createdBy === userId;
+
+    // For "delete for everyone"
+    if (deleteForEveryone) {
+      // Only admins or creator can delete for everyone in groups
+      if (message.conversation.type === 'GROUP') {
+        if (!isAdmin && !isGroupCreator) {
+          throw new ForbiddenException(
+            'Only admins can delete messages for everyone',
+          );
+        }
+      } else {
+        // In direct chats, only sender can delete
+        if (!isSender) {
+          throw new ForbiddenException('You can only delete your own messages');
+        }
+      }
+    } else {
+      // Regular delete - only sender can delete
+      if (!isSender) {
+        throw new ForbiddenException('You can only delete your own messages');
+      }
+    }
+
+    // Perform soft delete
+    const deletedMessage = await this.prisma.message.update({
       where: { id: messageId },
       data: {
         isDeleted: true,
         deletedAt: new Date(),
-        content: null, // Clear content
+        content: null, // Clear content for privacy
+        mediaUrl: null, // Clear media URL
+        thumbnailUrl: null,
+        fileName: null,
+        fileSize: null,
       },
     });
+
+    this.logger.log(
+      {
+        messageId,
+        userId,
+        conversationId: message.conversationId,
+        deleteForEveryone,
+      },
+      'Message deleted',
+    );
+
+    return {
+      success: true,
+      messageId: deletedMessage.id,
+      deletedAt: deletedMessage.deletedAt,
+      deleteForEveryone,
+    };
+  }
+
+  /**
+   * Permanently delete message files from storage
+   */
+  async deleteMessageFiles(messageId: string) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message || !message.mediaUrl) {
+      return;
+    }
+
+    // Extract file key from URL
+    // Assuming mediaUrl is like: http://localhost:9000/echola-media/messages/file.jpg
+    const urlParts = message.mediaUrl.split('/');
+    const fileKey = urlParts.slice(-2).join('/'); // "messages/file.jpg"
+
+    await this.storageService.deleteFile(fileKey);
+
+    this.logger.log(
+      { messageId, fileKey },
+      'Message files deleted from storage',
+    );
   }
 
   async getUnreadCount(userId: string, conversationId: string) {
