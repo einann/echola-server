@@ -1,31 +1,34 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, ForbiddenException, Inject } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { AuthenticatedSocket } from '../gateway/types/socket.types';
-import { StorageService } from './storage.service';
-import { FileProcessorService } from './file-processor.service';
-import { MessagesService } from '../messages/messages.service';
+import {
+  MediaUploadService,
+  UploadedMediaResult,
+} from './media-upload.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { SocketService } from '../socket/socket.service';
 import {
   ConfirmFileUploadEvent,
   RequestFileUploadEvent,
 } from './dto/file-upload-events.dto';
 import { RedisService, UploadMetadata } from '../redis';
-import { StorageValidationService } from './storage-validation.service';
 
+/**
+ * Handles ONLY file upload WebSocket events
+ * Does NOT handle message creation - that's MessagesHandler's job
+ */
 @Injectable()
 export class StorageHandler {
   constructor(
-    private configService: ConfigService,
-    private storageService: StorageService,
-    private storageValidationService: StorageValidationService,
-    private fileProcessorService: FileProcessorService,
-    private messagesService: MessagesService,
+    private mediaUploadService: MediaUploadService,
     private redisService: RedisService,
     private prismaService: PrismaService,
-    private socketService: SocketService,
+    @Inject(Logger) private readonly logger: Logger,
   ) {}
 
+  /**
+   * Handle presigned URL request
+   * Returns upload URL to client - NO message creation
+   */
   async requestUpload(
     client: AuthenticatedSocket,
     data: RequestFileUploadEvent,
@@ -48,24 +51,15 @@ export class StorageHandler {
       );
     }
 
-    // Validate file type and size (throws exceptions on validation failure)
-    this.storageValidationService.validateFileRequest(
+    // Generate presigned URL
+    const result = await this.mediaUploadService.generatePresignedUrl(
+      data.fileName,
+      data.mimeType,
       data.fileType,
       data.fileSize,
-      data.mimeType,
     );
 
-    const fileKey = this.storageValidationService.generateFileKey(
-      data.fileName,
-    );
-
-    // Generate presigned upload URL (5 minutes expiry)
-    const uploadUrl = await this.storageService.generatePresignedUploadUrl(
-      data.fileName,
-      data.mimeType,
-      300,
-    );
-
+    // Cache metadata in Redis for later confirmation
     const metadata: UploadMetadata = {
       fileName: data.fileName,
       fileType: data.fileType,
@@ -73,155 +67,97 @@ export class StorageHandler {
       fileSize: data.fileSize,
     };
 
-    // Cache the file metadata in Redis temporarily (5 minutes TTL)
-    await this.redisService.setUploadMetadata(userId, fileKey, metadata, 300);
+    await this.redisService.setUploadMetadata(
+      userId,
+      result.fileKey,
+      metadata,
+      300,
+    );
 
-    // Send presigned URL back to client
+    // Send response to client
     client.emit('file:upload:url', {
-      uploadUrl,
-      fileKey,
-      expiresIn: 300,
+      ...result,
       instructions: 'Use PUT request to upload file directly to this URL',
     });
+
+    this.logger.log(
+      { userId, fileKey: result.fileKey, conversationId: data.conversationId },
+      'Presigned URL generated',
+    );
   }
 
+  /**
+   * Handle upload confirmation
+   * Processes the file and emits event for MessagesHandler to create message
+   * NO message creation here!
+   */
   async confirmUpload(
     client: AuthenticatedSocket,
     data: ConfirmFileUploadEvent,
   ): Promise<void> {
     const userId = client.data.userId;
 
-    // Verify this upload request was initiated by this user
-    const uploadMetadata: UploadMetadata | null =
-      await this.redisService.getUploadMetadata(userId, data.fileKey);
+    // Verify upload request was initiated by this user
+    const uploadMetadata = await this.redisService.getUploadMetadata(
+      userId,
+      data.fileKey,
+    );
 
     if (!uploadMetadata) {
       throw new ForbiddenException('Invalid or expired upload request');
     }
 
-    // Verify conversation matches
     if (uploadMetadata.conversationId !== data.conversationId) {
       throw new ForbiddenException('Conversation mismatch');
     }
 
-    let mediaUrl = this.storageService.getPublicUrl(data.fileKey);
-    let thumbnailUrl: string | undefined;
-    let processedFileSize = data.fileSize;
+    try {
+      let mediaResult: UploadedMediaResult;
 
-    // Process images: compress, resize, create thumbnail
-    if (data.fileType === 'image') {
-      try {
-        // Download the uploaded file from S3
-        const downloadUrl =
-          await this.storageService.generatePresignedDownloadUrl(data.fileKey);
-        const response = await fetch(downloadUrl);
-        const buffer = Buffer.from(await response.arrayBuffer());
-
-        // Process image (compress, resize, create thumbnail)
-        const { processedBuffer, thumbnailBuffer } =
-          await this.fileProcessorService.validateAndProcessImage(buffer);
-
-        // Upload processed image
-        const processedFileKey = `processed/${data.fileKey}`;
-        await this.storageService.uploadBuffer(
-          processedFileKey,
-          processedBuffer,
-          'image/jpeg',
+      // Process based on file type
+      if (data.fileType === 'image') {
+        mediaResult = await this.mediaUploadService.processUploadedImage(
+          data.fileKey,
         );
-        mediaUrl = this.storageService.getPublicUrl(processedFileKey);
-        processedFileSize = processedBuffer.length;
-
-        // Upload thumbnail
-        const thumbnailFileKey = `thumbnails/${data.fileKey}`;
-        await this.storageService.uploadBuffer(
-          thumbnailFileKey,
-          thumbnailBuffer,
-          'image/jpeg',
-        );
-        thumbnailUrl = this.storageService.getPublicUrl(thumbnailFileKey);
-
-        // Delete original unprocessed file
-        await this.storageService.deleteFile(data.fileKey);
-
-        // Delete metadata from redis
-        await this.redisService.deleteUploadMetadata(userId, data.fileKey);
-      } catch (error) {
-        console.error('Error processing image:', error);
-        // Fall back to using original upload if processing fails
-        console.log('Using original uploaded image');
+      } else {
+        // For non-images, just get the public URL
+        mediaResult = {
+          mediaUrl: this.mediaUploadService['storageService'].getPublicUrl(
+            data.fileKey,
+          ),
+          fileSize: data.fileSize,
+          processedFileKey: data.fileKey,
+        };
       }
-    }
 
-    // Create message with media
-    const message = await this.messagesService.sendMessage(userId, {
-      conversationId: data.conversationId,
-      content: data.content || '', // Optional caption
-      contentType: data.fileType,
-      mediaUrl,
-      thumbnailUrl,
-      fileName: data.fileName,
-      fileSize: processedFileSize,
-    });
+      // Clean up Redis metadata
+      await this.redisService.deleteUploadMetadata(userId, data.fileKey);
 
-    // Delete the temporary upload metadata from Redis
-    await this.redisService.del(`upload:${userId}:${data.fileKey}`);
-
-    // Acknowledge to sender
-    client.emit('file:upload:success', {
-      message,
-    });
-
-    // Get conversation participants
-    const participants =
-      await this.prismaService.conversationParticipant.findMany({
-        where: {
-          conversationId: data.conversationId,
-          userId: { not: userId },
-          leftAt: null,
-        },
+      // Storage is done, now let Messages handle the rest
+      // TODO: Burası komple yanlış. Burada bir şekilde mesaj kaydı / güncellemesi yapılmalı.
+      client.emit('file:processed', {
+        conversationId: data.conversationId,
+        fileName: data.fileName,
+        fileType: data.fileType,
+        content: data.content || '',
+        ...mediaResult,
       });
 
-    // Invalidate conversation cache
-    await this.redisService.invalidateConversationCache(data.conversationId);
+      this.logger.log(
+        { userId, fileKey: data.fileKey, conversationId: data.conversationId },
+        'File upload confirmed and processed',
+      );
+    } catch (error) {
+      this.logger.error(
+        { error: error as string, userId, fileKey: data.fileKey },
+        'Failed to process upload',
+      );
 
-    // Deliver to online recipients via WebSocket
-    for (const participant of participants) {
-      const isOnline = await this.redisService.isUserOnline(participant.userId);
-
-      if (isOnline) {
-        // Deliver via WebSocket
-        this.socketService.emitToUser(
-          participant.userId,
-          'new_message',
-          message,
-        );
-
-        // Auto-mark as delivered after 1 second
-        setTimeout(() => {
-          void (async () => {
-            await this.messagesService.markMessageAsDelivered(
-              participant.userId,
-              message.id,
-            );
-
-            void this.socketService.emitToUser(userId, 'message_delivered', {
-              messageId: message.id,
-              userId: participant.userId,
-              deliveredAt: new Date(),
-            });
-          })();
-        }, 1000);
-      } else {
-        // User offline: add to Redis inbox
-        await this.redisService.addToInbox(participant.userId, message);
-      }
+      // Emit error to client
+      client.emit('file:upload:error', {
+        error: 'Failed to process file upload',
+        fileKey: data.fileKey,
+      });
     }
-
-    // Publish to Redis for other server instances
-    await this.redisService.publish(`conversation:${data.conversationId}`, {
-      type: 'new_message',
-      message,
-      senderId: userId,
-    });
   }
 }

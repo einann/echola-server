@@ -35,6 +35,10 @@ export class SendMessageEvent {
   fileName?: string;
 
   @IsOptional()
+  @IsString()
+  fileType?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   fileSize?: number;
