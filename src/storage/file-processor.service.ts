@@ -2,10 +2,11 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import sharp from 'sharp';
 import { fileTypeFromBuffer } from 'file-type';
 import { ConfigService } from '@nestjs/config';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class FileProcessorService {
-  constructor(private configService: ConfigService) {}
+  constructor(private configService: ConfigService<EnvironmentVariables>) {}
 
   async validateAndProcessImage(buffer: Buffer): Promise<{
     processedBuffer: Buffer;
@@ -26,7 +27,7 @@ export class FileProcessorService {
     }
 
     // Validate size
-    const maxSize = this.configService.get<number>('MAX_IMAGE_SIZE');
+    const maxSize = this.configService.get('MAX_IMAGE_SIZE', { infer: true });
     if (maxSize && buffer.length > maxSize) {
       throw new BadRequestException(
         `Image size exceeds ${maxSize / 1024 / 1024}MB limit`,

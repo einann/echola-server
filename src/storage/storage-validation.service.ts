@@ -1,5 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 type FileType = 'image' | 'video' | 'audio' | 'document';
 
@@ -12,19 +13,24 @@ interface FileTypeConfig {
 export class StorageValidationService {
   private readonly fileTypeConfigs: Record<FileType, FileTypeConfig>;
 
-  constructor(private configService: ConfigService) {
+  constructor(private configService: ConfigService<EnvironmentVariables>) {
     this.fileTypeConfigs = {
       image: {
         mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
-        maxSize: this.configService.get<number>('MAX_IMAGE_SIZE') || 10485760, // 10MB
+        maxSize:
+          this.configService.get('MAX_IMAGE_SIZE', { infer: true }) || 10485760, // 10MB
       },
       video: {
         mimeTypes: ['video/mp4', 'video/quicktime', 'video/webm'],
-        maxSize: this.configService.get<number>('MAX_VIDEO_SIZE') || 104857600, // 100MB
+        maxSize:
+          this.configService.get('MAX_VIDEO_SIZE', { infer: true }) ||
+          104857600, // 100MB
       },
       audio: {
         mimeTypes: ['audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/webm'],
-        maxSize: this.configService.get<number>('MAX_AUDIO_SIZE') || 26214400, // 25MB
+        maxSize:
+          this.configService.get('MAX_DOCUMENT_SIZE', { infer: true }) ||
+          26214400, // 25MB
       },
       document: {
         mimeTypes: [
@@ -34,7 +40,8 @@ export class StorageValidationService {
           'application/vnd.openxmlformats-officedocument.spreadsheetml.document',
         ],
         maxSize:
-          this.configService.get<number>('MAX_DOCUMENT_SIZE') || 26214400, // 25MB
+          this.configService.get('MAX_DOCUMENT_SIZE', { infer: true }) ||
+          26214400, // 25MB
       },
     };
   }

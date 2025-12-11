@@ -6,6 +6,7 @@ import {
   QueuedMessage,
   UploadMetadata,
 } from './types/redis-data.types';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -13,10 +14,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   private readonly pubClient: Redis;
   private readonly subClient: Redis;
 
-  constructor(private configService: ConfigService) {
+  constructor(private configService: ConfigService<EnvironmentVariables>) {
     const redisConfig = {
-      host: this.configService.getOrThrow<string>('REDIS_HOST'),
-      port: this.configService.getOrThrow<number>('REDIS_PORT'),
+      host: this.configService.get('REDIS_HOST', { infer: true }),
+      port: this.configService.get('REDIS_PORT', { infer: true }),
     };
 
     this.client = new Redis(redisConfig);

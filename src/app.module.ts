@@ -15,12 +15,14 @@ import { SocketModule } from './socket/socket.module';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { LoggerModule } from './common/logger/logger.module';
+import { validate } from './config/env.validation';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+      validate,
     }),
     LoggerModule,
     AuthModule,

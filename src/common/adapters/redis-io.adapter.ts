@@ -4,6 +4,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { createClient } from 'redis';
 import { INestApplicationContext, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter>;
@@ -11,14 +12,14 @@ export class RedisIoAdapter extends IoAdapter {
 
   constructor(
     private readonly app: INestApplicationContext,
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService<EnvironmentVariables>,
   ) {
     super(app);
   }
 
   async connectToRedis(): Promise<void> {
-    const host = this.configService.getOrThrow<string>('REDIS_HOST');
-    const port = this.configService.getOrThrow<number>('REDIS_PORT');
+    const host = this.configService.get('REDIS_HOST', { infer: true });
+    const port = this.configService.get('REDIS_PORT', { infer: true });
 
     this.logger.log(`Attempting to connect to Redis at ${host}:${port}...`);
 

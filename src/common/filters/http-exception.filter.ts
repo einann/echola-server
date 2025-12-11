@@ -10,6 +10,7 @@ import { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { Logger } from 'nestjs-pino';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 interface ErrorResponse {
   success: false;
@@ -26,7 +27,7 @@ interface ErrorResponse {
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   constructor(
-    private configService: ConfigService,
+    private configService: ConfigService<EnvironmentVariables>,
     @Inject(Logger) private readonly logger?: Logger,
   ) {}
 

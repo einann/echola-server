@@ -12,13 +12,14 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { User } from 'generated/prisma/client';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private configService: ConfigService,
+    private configService: ConfigService<EnvironmentVariables>,
     private redisService: RedisService,
   ) {}
 
@@ -217,14 +218,18 @@ export class AuthService {
 
     // Generate access token (short-lived)
     const accessToken = this.jwtService.sign(payload, {
-      secret: this.configService.get('JWT_ACCESS_SECRET'),
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION'),
+      secret: this.configService.get('JWT_ACCESS_SECRET', { infer: true }),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION', {
+        infer: true,
+      }),
     });
 
     // Generate refresh token (long-lived)
     const refreshToken = this.jwtService.sign(payload, {
-      secret: this.configService.get('JWT_REFRESH_SECRET'),
-      expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION'),
+      secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
+      expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION', {
+        infer: true,
+      }),
     });
 
     // Store refresh token in database
@@ -252,7 +257,9 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      expiresIn: this.configService.getOrThrow<string>('JWT_ACCESS_EXPIRATION'),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION', {
+        infer: true,
+      }),
     };
   }
 

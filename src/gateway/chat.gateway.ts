@@ -46,6 +46,7 @@ import {
 import { JwtPayload } from './types/jwt.types';
 import { RedisConversationEvent } from '../redis/types/redis-data.types';
 import { AllWsExceptionsFilter } from '../common/filters/ws-exception.filter';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 @WebSocketGateway({
   cors: {
@@ -64,7 +65,7 @@ export class ChatGateway
 
   constructor(
     private jwtService: JwtService,
-    private configService: ConfigService,
+    private configService: ConfigService<EnvironmentVariables>,
     private socketService: SocketService,
     private connectionHandler: ConnectionHandler,
     private messagesHandler: MessagesHandler,
@@ -101,7 +102,7 @@ export class ChatGateway
 
       // Verify JWT token
       const payload = this.jwtService.verify<JwtPayload>(token, {
-        secret: this.configService.getOrThrow<string>('JWT_ACCESS_SECRET'),
+        secret: this.configService.get('JWT_ACCESS_SECRET', { infer: true }),
       });
 
       const userId = payload.sub;

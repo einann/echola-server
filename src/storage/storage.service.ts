@@ -9,6 +9,7 @@ import {
   CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { EnvironmentVariables } from 'src/config/env.validation';
 
 export interface PresignedUploadResult {
   uploadUrl: string;
@@ -26,16 +27,24 @@ export class StorageService implements OnModuleInit {
   private bucketName: string;
   private s3Endpoint: string;
 
-  constructor(private configService: ConfigService) {
-    this.bucketName = this.configService.getOrThrow<string>('S3_BUCKET_NAME');
-    this.s3Endpoint = this.configService.getOrThrow<string>('S3_ENDPOINT');
+  constructor(private configService: ConfigService<EnvironmentVariables>) {
+    this.bucketName = this.configService.getOrThrow('S3_BUCKET_NAME', {
+      infer: true,
+    });
+    this.s3Endpoint = this.configService.getOrThrow('S3_ENDPOINT', {
+      infer: true,
+    });
 
     this.s3Client = new S3Client({
       endpoint: this.s3Endpoint,
-      region: this.configService.getOrThrow<string>('S3_REGION'),
+      region: this.configService.getOrThrow('S3_REGION', { infer: true }),
       credentials: {
-        accessKeyId: this.configService.getOrThrow<string>('S3_ACCESS_KEY'),
-        secretAccessKey: this.configService.getOrThrow<string>('S3_SECRET_KEY'),
+        accessKeyId: this.configService.getOrThrow('S3_ACCESS_KEY', {
+          infer: true,
+        }),
+        secretAccessKey: this.configService.getOrThrow('S3_SECRET_KEY', {
+          infer: true,
+        }),
       },
       forcePathStyle: true, // Required for MinIO
     });
