@@ -5,10 +5,9 @@ import { HealthController } from './health.controller';
 import { PrismaHealthIndicator } from './indicators/prisma-health.indicator';
 import { RedisHealthIndicator } from './indicators/redis-health.indicator';
 import { MinioHealthIndicator } from './indicators/minio-health.indicator';
-import { StorageModule } from 'src/storage/storage.module';
 
 @Module({
-  imports: [TerminusModule, HttpModule, StorageModule],
+  imports: [TerminusModule, HttpModule],
   controllers: [HealthController],
   providers: [
     PrismaHealthIndicator,

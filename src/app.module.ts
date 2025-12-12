@@ -7,7 +7,6 @@ import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './auth/auth.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { MessagesModule } from './messages/messages.module';
-import { StorageModule } from './storage/storage.module';
 import { ConnectionModule } from './connection/connection.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { PresenceModule } from './presence/presence.module';
@@ -36,7 +35,6 @@ import { HealthModule } from './health/health.module';
     PrismaModule,
     RedisModule,
     SocketModule,
-    StorageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

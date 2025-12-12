@@ -10,13 +10,13 @@ import { Logger } from 'nestjs-pino';
 import { PrismaService } from '../prisma/prisma.service';
 import { SendMessageDto } from '../conversations/dto/send-message.dto';
 import { DeliveryStatus } from 'generated/prisma/client';
-import { StorageService } from 'src/storage/storage.service';
+// import { StorageService } from 'src/storage/storage.service';
 
 @Injectable()
 export class MessagesService {
   constructor(
     private prisma: PrismaService,
-    private storageService: StorageService,
+    // private storageService: StorageService,
     @Inject(Logger) private readonly logger: Logger,
   ) {}
 
@@ -486,27 +486,27 @@ export class MessagesService {
   /**
    * Permanently delete message files from storage
    */
-  async deleteMessageFiles(messageId: string) {
-    const message = await this.prisma.message.findUnique({
-      where: { id: messageId },
-    });
+  // async deleteMessageFiles(messageId: string) {
+  //   const message = await this.prisma.message.findUnique({
+  //     where: { id: messageId },
+  //   });
 
-    if (!message || !message.mediaUrl) {
-      return;
-    }
+  //   if (!message || !message.mediaUrl) {
+  //     return;
+  //   }
 
-    // Extract file key from URL
-    // Assuming mediaUrl is like: http://localhost:9000/echola-media/messages/file.jpg
-    const urlParts = message.mediaUrl.split('/');
-    const fileKey = urlParts.slice(-2).join('/'); // "messages/file.jpg"
+  //   // Extract file key from URL
+  //   // Assuming mediaUrl is like: http://localhost:9000/echola-media/messages/file.jpg
+  //   const urlParts = message.mediaUrl.split('/');
+  //   const fileKey = urlParts.slice(-2).join('/'); // "messages/file.jpg"
 
-    await this.storageService.deleteFile(fileKey);
+  //   await this.storageService.deleteFile(fileKey);
 
-    this.logger.log(
-      { messageId, fileKey },
-      'Message files deleted from storage',
-    );
-  }
+  //   this.logger.log(
+  //     { messageId, fileKey },
+  //     'Message files deleted from storage',
+  //   );
+  // }
 
   async getUnreadCount(userId: string, conversationId: string) {
     const count = await this.prisma.messageStatus.count({

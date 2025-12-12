@@ -163,7 +163,7 @@ export class MessagesHandler {
     );
 
     // Delete files from storage asynchronously
-    void this.messagesService.deleteMessageFiles(data.messageId);
+    // void this.messagesService.deleteMessageFiles(data.messageId);
 
     return result;
   }
