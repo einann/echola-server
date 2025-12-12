@@ -116,3 +116,6 @@ Required in `.env` (see `.env.example`):
 - **WebSocket responses**: Handlers return acknowledgment objects, errors go through `AllWsExceptionsFilter`
 - **DTO validation**: `class-validator` decorators with global `ValidationPipe`
 - **Socket typing**: `AuthenticatedSocket` extends Socket with `data.userId`, `data.deviceId`
+
+- When creating new modules, always update app.module. Don't use newly created module/controller/service files elsewhere before ask.
+- When implementing a new feature which uses a library of framework, use context7 in order to check up to date documentation.
