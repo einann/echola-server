@@ -1,59 +1,54 @@
 import {
   IsString,
   IsOptional,
-  IsInt,
   Min,
   MaxLength,
   IsNotEmpty,
   IsNumber,
   IsEnum,
+  IsUUID,
+  ValidateNested,
+  IsArray,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { MediaType } from 'generated/prisma/client';
 
-export class SendMessageEvent {
-  @IsString()
+// ============================================
+// TEXT MESSAGE
+// ============================================
+
+export class SendTextMessageEvent {
+  @IsUUID()
   conversationId: string;
 
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(10000)
-  content?: string;
+  content: string;
 
   @IsOptional()
-  @IsString()
-  contentType?: string;
-
-  @IsOptional()
-  @IsString()
-  mediaUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  thumbnailUrl?: string;
-
-  @IsOptional()
-  @IsString()
-  fileName?: string;
-
-  @IsOptional()
-  @IsString()
-  fileType?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  fileSize?: number;
-
-  @IsOptional()
-  @IsString()
+  @IsUUID()
   replyToId?: string;
+
+  @IsOptional()
+  @IsString()
+  tempId?: string; // Client-side temporary ID for optimistic UI
 }
+
+// ============================================
+// TYPING INDICATOR
+// ============================================
 
 export class TypingEvent {
-  @IsString()
+  @IsUUID()
   conversationId: string;
 }
 
-export class RequestFileUploadEvent {
+// ============================================
+// MEDIA UPLOAD FLOW
+// ============================================
+
+export class RequestMediaUploadEvent {
   @IsString()
   @IsNotEmpty()
   fileName: string;
@@ -63,17 +58,54 @@ export class RequestFileUploadEvent {
   mimeType: string;
 
   @IsNumber()
+  @Min(1)
   fileSize: number;
 
-  @IsEnum(['image', 'video', 'audio', 'document'])
-  fileType: 'image' | 'video' | 'audio' | 'document';
+  @IsEnum(MediaType)
+  mediaType: MediaType;
+
+  @IsUUID()
+  conversationId: string;
+
+  @IsOptional()
+  @IsString()
+  tempId?: string; // For client tracking
+}
+
+export class ConfirmMediaUploadEvent {
+  @IsString()
+  @IsNotEmpty()
+  fileKey: string; // Key in temp bucket
 
   @IsString()
   @IsNotEmpty()
+  fileName: string;
+
+  @IsEnum(MediaType)
+  mediaType: MediaType;
+
+  @IsUUID()
   conversationId: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  caption?: string;
+
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
+
+  @IsOptional()
+  @IsString()
+  tempId?: string;
 }
 
-export class ConfirmFileUploadEvent {
+// ============================================
+// MULTIPLE ATTACHMENTS (Future-proof)
+// ============================================
+
+export class AttachmentInfo {
   @IsString()
   @IsNotEmpty()
   fileKey: string;
@@ -82,17 +114,63 @@ export class ConfirmFileUploadEvent {
   @IsNotEmpty()
   fileName: string;
 
-  @IsEnum(['image', 'video', 'audio', 'document'])
-  fileType: 'image' | 'video' | 'audio' | 'document';
+  @IsEnum(MediaType)
+  mediaType: MediaType;
+}
 
-  @IsString()
-  @IsNotEmpty()
+export class SendMediaMessageEvent {
+  @IsUUID()
   conversationId: string;
 
-  @IsNumber()
-  fileSize: number;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AttachmentInfo)
+  attachments: AttachmentInfo[];
 
-  @IsString()
   @IsOptional()
-  content?: string; // Optional caption for media
+  @IsString()
+  @MaxLength(2000)
+  caption?: string;
+
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
+
+  @IsOptional()
+  @IsString()
+  tempId?: string;
+}
+
+// ============================================
+// UPLOAD URL RESPONSE
+// ============================================
+
+export class MediaUploadUrlResponse {
+  uploadUrl: string;
+  fileKey: string;
+  expiresAt: Date;
+  tempId?: string;
+}
+
+// ============================================
+// LEGACY (Backward compatibility - deprecate later)
+// ============================================
+
+/** @deprecated Use SendTextMessageEvent instead */
+export class SendMessageEvent {
+  @IsUUID()
+  conversationId: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(10000)
+  content?: string;
+
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
+
+  @IsOptional()
+  @IsString()
+  tempId?: string;
 }

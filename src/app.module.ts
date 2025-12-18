@@ -16,6 +16,8 @@ import { RateLimitMiddleware } from './common/middleware/rate-limit.middleware';
 import { LoggerModule } from './common/logger/logger.module';
 import { validate } from './config/env.validation';
 import { HealthModule } from './health/health.module';
+import { MediaModule } from './media/media.module';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -30,10 +32,12 @@ import { HealthModule } from './health/health.module';
     ConversationsModule,
     GatewayModule,
     HealthModule,
+    MediaModule,
     MessagesModule,
     PresenceModule,
     PrismaModule,
     RedisModule,
+    StorageModule,
     SocketModule,
   ],
   controllers: [AppController],

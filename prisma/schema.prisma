@@ -23,6 +23,20 @@ enum DeliveryStatus {
   READ
 }
 
+enum MessageType {
+  TEXT
+  MEDIA
+  SYSTEM
+  DELETED 
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+}
+
 // ============================================
 // USER & AUTH MODELS
 // ============================================
@@ -166,22 +180,18 @@ model ConversationParticipant {
 }
 
 model Message {
-  id             String   @id @default(uuid())
-  conversationId String   @map("conversation_id")
-  senderId       String   @map("sender_id")
+  id             String      @id @default(uuid())
+  conversationId String      @map("conversation_id")
+  senderId       String      @map("sender_id")
   
-  // Message content
-  content     String?  // Text content (null for media-only messages)
-  contentType String   @default("text") @map("content_type") // text, image, video, audio, document
+  // Message type ve content
+  type        MessageType @default(TEXT)
+  content     String?     // Text veya caption
   
-  // Media attachments
-  mediaUrl     String? @map("media_url")
-  thumbnailUrl String? @map("thumbnail_url")
-  fileName     String? @map("file_name")
-  fileSize     Int?    @map("file_size") // in bytes
+  // Reply support
+  replyToId   String?  @map("reply_to_id")
   
-  // Message metadata
-  replyToId   String?  @map("reply_to_id") // For threaded replies
+  // Edit/Delete tracking
   isEdited    Boolean  @default(false) @map("is_edited")
   isDeleted   Boolean  @default(false) @map("is_deleted")
   
@@ -198,11 +208,54 @@ model Message {
   replies      Message[]         @relation("MessageReplies")
   statuses     MessageStatus[]
   reactions    MessageReaction[]
+  attachments  MessageAttachment[]  // 👈 Yeni relation
   
-  // Critical indexes for performance
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])
+  @@index([type])  // Media mesajlarını filtrelemek için
   @@map("messages")
+}
+
+model MessageAttachment {
+  id        String    @id @default(uuid())
+  messageId String    @map("message_id")
+  
+  // Media identification
+  mediaType MediaType @map("media_type")
+  mimeType  String    @map("mime_type")  // "image/jpeg", "video/mp4"
+  
+  // Storage references (kritik!)
+  fileKey      String  @map("file_key")       // S3/MinIO key
+  bucket       String                          // Hangi bucket'ta
+  url          String                          // Public/signed URL
+  thumbnailKey String? @map("thumbnail_key")  // Thumbnail key (varsa)
+  thumbnailUrl String? @map("thumbnail_url")
+  
+  // File metadata
+  fileName     String? @map("file_name")      // Original filename
+  fileSize     Int     @map("file_size")      // Bytes
+  
+  // Media-specific metadata
+  width        Int?                            // Image/Video
+  height       Int?                            // Image/Video
+  duration     Float?                          // Video/Audio (seconds)
+  
+  // Processing status (opsiyonel, async processing için)
+  isProcessed  Boolean @default(true) @map("is_processed")
+  
+  // Order (çoklu attachment için)
+  order        Int     @default(0)
+  
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  // Relations
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  @@index([messageId])
+  @@index([fileKey])  // Cleanup job'ları için
+  @@index([bucket, createdAt])  // Storage analytics için
+  @@map("message_attachments")
 }
 
 model MessageStatus {
