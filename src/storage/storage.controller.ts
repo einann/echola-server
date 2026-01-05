@@ -75,9 +75,9 @@ export class StorageController {
   @Get('download-url/:bucket/*')
   async getDownloadUrl(
     @Param('bucket') bucket: StorageBucket,
-    @Param() params: { 0: string },
+    @Param() params: { bucket: string; path: string[] },
   ) {
-    const fileKey = params[0];
+    const fileKey = params.path.join('/');
     const url = await this.storageService.generatePresignedDownloadUrl(
       bucket,
       fileKey,
@@ -89,13 +89,14 @@ export class StorageController {
   /**
    * DELETE /storage/:bucket/:key
    * Test: Dosya sil
+   * TODO: yukarıdaki gibi düzeltilecek.
    */
   @Delete(':bucket/*')
   async deleteFile(
     @Param('bucket') bucket: StorageBucket,
-    @Param() params: { 0: string },
+    @Param() params: { bucket: string; path: string[] },
   ) {
-    const fileKey = params[0];
+    const fileKey = params.path.join('/');
     await this.storageService.delete(bucket, fileKey);
 
     return {

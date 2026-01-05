@@ -1,9 +1,12 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable } from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadBucketCommand,
+  CreateBucketCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { StorageBucket } from './enums';
@@ -27,6 +30,33 @@ export class StorageService {
       },
       forcePathStyle: true,
     });
+  }
+
+  /**
+   * Uygulama başladığında bucket'ları kontrol et ve oluştur
+   */
+  async onModuleInit(): Promise<void> {
+    const buckets = Object.values(StorageBucket);
+
+    for (const bucket of buckets) {
+      await this.ensureBucketExists(bucket);
+    }
+  }
+
+  private async ensureBucketExists(bucket: string): Promise<void> {
+    try {
+      await this.s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
+    } catch (error: any) {
+      if (
+        error.name === 'NotFound' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
+        await this.s3Client.send(new CreateBucketCommand({ Bucket: bucket }));
+        console.log(`Bucket created: ${bucket}`);
+      } else {
+        throw error;
+      }
+    }
   }
 
   /**
@@ -134,6 +164,6 @@ export class StorageService {
   }
 
   private buildPublicUrl(bucket: StorageBucket, fileKey: string): string {
-    return `${process.env.MINIO_ENDPOINT}/${bucket}/${fileKey}`;
+    return `${process.env.S3_ENDPOINT}/${bucket}/${fileKey}`;
   }
 }

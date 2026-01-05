@@ -38,9 +38,9 @@ export class MediaController {
   @Get('download-url/:bucket/*')
   async getDownloadUrl(
     @Param('bucket') bucket: string,
-    @Param() params: { 0: string }, // wildcard for nested keys
+    @Param() params: { bucket: string; path: string[] },
   ) {
-    const fileKey = params[0];
+    const fileKey = params.path.join('/');
     const url = await this.mediaService.getDownloadUrl(bucket as any, fileKey);
 
     return { url };
