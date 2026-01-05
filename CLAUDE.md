@@ -116,4 +116,4 @@ Copy `.env.example` to `.env` and configure:
 - S3/MinIO credentials
 - Sentry DSN (optional)
 
-# When implementing a new library or framework or a feature which uses these, use context7 to check latest documents.
+# When implementing a new library or framework or a feature which uses they, use context7 to check latest documents.
