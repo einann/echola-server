@@ -48,6 +48,7 @@ npx prisma studio       # Visual database browser
 ### Module Structure
 
 Each feature is a self-contained NestJS module following this pattern:
+
 - `*.module.ts` - Module definition with imports/providers
 - `*.service.ts` - Business logic
 - `*.controller.ts` - HTTP endpoints
@@ -56,16 +57,16 @@ Each feature is a self-contained NestJS module following this pattern:
 
 ### Key Modules
 
-| Module | Purpose |
-|--------|---------|
-| `auth/` | JWT authentication, login/register, token refresh |
-| `gateway/` | Main WebSocket gateway (`chat.gateway.ts`) |
-| `conversations/` | Direct & group chat management |
-| `messages/` | Message CRUD, attachments |
-| `presence/` | Online status, typing indicators |
-| `media/` | Image/video processing (Sharp) |
-| `storage/` | S3/MinIO file operations |
-| `redis/` | Redis client wrapper |
+| Module           | Purpose                                           |
+| ---------------- | ------------------------------------------------- |
+| `auth/`          | JWT authentication, login/register, token refresh |
+| `gateway/`       | Main WebSocket gateway (`chat.gateway.ts`)        |
+| `conversations/` | Direct & group chat management                    |
+| `messages/`      | Message CRUD, attachments                         |
+| `presence/`      | Online status, typing indicators                  |
+| `media/`         | Image/video processing (Sharp)                    |
+| `storage/`       | S3/MinIO file operations                          |
+| `redis/`         | Redis client wrapper                              |
 
 ### Response Format
 
@@ -98,6 +99,7 @@ Key enums: `ConversationType` (DIRECT, GROUP), `MessageType` (TEXT, MEDIA, SYSTE
 ## Infrastructure
 
 Docker Compose provides local development services:
+
 - PostgreSQL 15
 - Redis 7
 - MinIO (S3-compatible storage)
@@ -107,8 +109,11 @@ Run `docker-compose up -d` to start services before development.
 ## Environment
 
 Copy `.env.example` to `.env` and configure:
+
 - Database connection (PostgreSQL)
 - Redis connection
 - JWT secrets
 - S3/MinIO credentials
 - Sentry DSN (optional)
+
+# When implementing a new library or framework or a feature which uses these, use context7 to check latest documents.
