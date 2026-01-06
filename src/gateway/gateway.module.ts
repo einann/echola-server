@@ -5,7 +5,6 @@ import { ChatGateway } from './chat.gateway';
 import { ConnectionModule } from '../connection/connection.module';
 import { MessagesModule } from '../messages/messages.module';
 import { PresenceModule } from '../presence/presence.module';
-import { StorageModule } from '../storage/storage.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 
 @Module({
@@ -15,7 +14,6 @@ import { ConversationsModule } from '../conversations/conversations.module';
     ConnectionModule,
     MessagesModule,
     PresenceModule,
-    StorageModule,
     ConversationsModule,
   ],
   providers: [ChatGateway],

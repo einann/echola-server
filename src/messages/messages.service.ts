@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   Injectable,
   NotFoundException,
@@ -8,83 +10,95 @@ import {
 import { Logger } from 'nestjs-pino';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { SendMessageDto } from '../conversations/dto/send-message.dto';
-import { DeliveryStatus } from 'generated/prisma/client';
+import {
+  DeliveryStatus,
+  MessageType,
+  MediaType,
+} from 'generated/prisma/client';
+import { CreateMediaMessageDto } from './dto/create-media-message.dto';
+import { ConfigService } from '@nestjs/config';
+import { EnvironmentVariables } from 'src/config/env.validation';
 import { StorageService } from 'src/storage/storage.service';
+import { StorageBucket } from 'src/storage/enums';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Injectable()
 export class MessagesService {
   constructor(
     private prisma: PrismaService,
+    private configService: ConfigService<EnvironmentVariables>,
     private storageService: StorageService,
     @Inject(Logger) private readonly logger: Logger,
   ) {}
 
-  async sendMessage(senderId: string, sendMessageDto: SendMessageDto) {
-    const {
-      conversationId,
-      content,
-      contentType,
-      mediaUrl,
-      thumbnailUrl,
-      fileName,
-      fileSize,
-      replyToId,
-    } = sendMessageDto;
+  // ============================================
+  // COMMON INCLUDES
+  // ============================================
 
-    // Verify sender is participant in the conversation
-    const participant = await this.prisma.conversationParticipant.findFirst({
-      where: {
-        conversationId,
-        userId: senderId,
-        leftAt: null,
+  private readonly messageInclude = {
+    sender: {
+      select: {
+        id: true,
+        displayName: true,
+        username: true,
+        avatarUrl: true,
       },
-    });
+    },
+    statuses: {
+      include: {
+        user: {
+          select: {
+            id: true,
+            displayName: true,
+          },
+        },
+      },
+    },
+    replyTo: {
+      include: {
+        sender: {
+          select: {
+            id: true,
+            displayName: true,
+            username: true,
+          },
+        },
+        attachments: true, // Reply'da da attachment göster
+      },
+    },
+    attachments: true,
+  };
 
-    if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
-    }
+  // ============================================
+  // SEND TEXT MESSAGE
+  // ============================================
 
-    // Validate content exists for text messages
-    if (contentType === 'text' && !content) {
+  async sendMessage(senderId: string, sendMessageDto: SendMessageDto) {
+    const { conversationId, content, replyToId } = sendMessageDto;
+
+    // Verify sender is participant
+    await this.verifyParticipant(conversationId, senderId);
+
+    // Validate content
+    if (!content?.trim()) {
       throw new BadRequestException('Text messages must have content');
     }
 
-    // Verify reply-to message exists if specified
+    // Verify reply-to message if specified
     if (replyToId) {
-      const replyToMessage = await this.prisma.message.findUnique({
-        where: { id: replyToId },
-      });
-
-      if (!replyToMessage || replyToMessage.conversationId !== conversationId) {
-        throw new BadRequestException(
-          'Reply-to message not found in this conversation',
-        );
-      }
+      await this.verifyReplyToMessage(replyToId, conversationId);
     }
 
-    // Get all other participants (recipients)
-    const recipients = await this.prisma.conversationParticipant.findMany({
-      where: {
-        conversationId,
-        userId: { not: senderId },
-        leftAt: null,
-      },
-    });
+    // Get recipients
+    const recipients = await this.getRecipients(conversationId, senderId);
 
-    // Create message with delivery statuses for all recipients
+    // Create message
     const message = await this.prisma.message.create({
       data: {
         conversationId,
         senderId,
-        content,
-        contentType: contentType || 'text',
-        mediaUrl,
-        thumbnailUrl,
-        fileName,
-        fileSize,
+        type: MessageType.TEXT,
+        content: content.trim(),
         replyToId,
         statuses: {
           create: recipients.map((recipient) => ({
@@ -93,47 +107,90 @@ export class MessagesService {
           })),
         },
       },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
-        statuses: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                displayName: true,
-              },
-            },
-          },
-        },
-        replyTo: {
-          include: {
-            sender: {
-              select: {
-                id: true,
-                displayName: true,
-                username: true,
-              },
-            },
-          },
-        },
-      },
+      include: this.messageInclude,
     });
 
-    // Update conversation's updatedAt timestamp
-    await this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    });
+    // Update conversation timestamp
+    await this.touchConversation(conversationId);
 
     return message;
   }
+
+  // ============================================
+  // SEND MEDIA MESSAGE
+  // ============================================
+
+  async createMediaMessage(dto: CreateMediaMessageDto) {
+    // Verify sender is participant
+    await this.verifyParticipant(dto.conversationId, dto.senderId);
+
+    // Verify reply-to if specified
+    if (dto.replyToId) {
+      await this.verifyReplyToMessage(dto.replyToId, dto.conversationId);
+    }
+
+    // Get recipients
+    const recipients = await this.getRecipients(
+      dto.conversationId,
+      dto.senderId,
+    );
+
+    // Determine media type from mimeType
+    const mediaType = this.determineMediaType(dto.media.metadata.mimeType);
+
+    // Create message with attachment
+    const message = await this.prisma.message.create({
+      data: {
+        conversationId: dto.conversationId,
+        senderId: dto.senderId,
+        type: MessageType.MEDIA,
+        content: dto.caption || null,
+        replyToId: dto.replyToId,
+        statuses: {
+          create: recipients.map((recipient) => ({
+            userId: recipient.userId,
+            status: DeliveryStatus.SENT,
+          })),
+        },
+        attachments: {
+          create: {
+            mediaType,
+            mimeType: dto.media.metadata.mimeType,
+            fileKey: dto.media.originalKey,
+            bucket: dto.media.bucket || StorageBucket.MEDIA,
+            url: dto.media.originalUrl,
+            thumbnailKey: dto.media.thumbnailKey,
+            thumbnailUrl: dto.media.thumbnailUrl,
+            fileName: dto.media.fileName,
+            fileSize: dto.media.originalSize,
+            width: dto.media.metadata.width,
+            height: dto.media.metadata.height,
+            duration: dto.media.metadata.duration,
+          },
+        },
+      },
+      include: this.messageInclude,
+    });
+
+    // Update conversation timestamp
+    await this.touchConversation(dto.conversationId);
+
+    this.logger.log(
+      {
+        messageId: message.id,
+        conversationId: dto.conversationId,
+        mediaType,
+        fileSize: dto.media.originalSize,
+      },
+      'Media message created',
+    );
+
+    return message;
+  }
+
+  // ============================================
+  // GET MESSAGES
+  // ============================================
 
   async getMessages(
     userId: string,
@@ -141,22 +198,8 @@ export class MessagesService {
     limit = 50,
     beforeMessageId?: string,
   ) {
-    // Verify user is participant
-    const participant = await this.prisma.conversationParticipant.findFirst({
-      where: {
-        conversationId,
-        userId,
-        leftAt: null,
-      },
-    });
+    await this.verifyParticipant(conversationId, userId);
 
-    if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
-    }
-
-    // Build pagination cursor
     const cursor = beforeMessageId ? { id: beforeMessageId } : undefined;
 
     const messages = await this.prisma.message.findMany({
@@ -165,39 +208,11 @@ export class MessagesService {
         isDeleted: false,
       },
       take: limit,
-      skip: cursor ? 1 : 0, // Skip the cursor message itself
+      skip: cursor ? 1 : 0,
       cursor,
       orderBy: { createdAt: 'desc' },
       include: {
-        sender: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
-        statuses: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                displayName: true,
-              },
-            },
-          },
-        },
-        replyTo: {
-          include: {
-            sender: {
-              select: {
-                id: true,
-                displayName: true,
-                username: true,
-              },
-            },
-          },
-        },
+        ...this.messageInclude,
         reactions: {
           include: {
             user: {
@@ -211,7 +226,6 @@ export class MessagesService {
       },
     });
 
-    // Reverse to get chronological order (oldest first)
     return messages.reverse();
   }
 
@@ -220,14 +234,7 @@ export class MessagesService {
       where: { id: messageId },
       include: {
         conversation: true,
-        sender: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
+        ...this.messageInclude,
       },
     });
 
@@ -238,13 +245,14 @@ export class MessagesService {
     return message;
   }
 
+  // ============================================
+  // MESSAGE STATUS UPDATES
+  // ============================================
+
   async markMessageAsDelivered(userId: string, messageId: string) {
     const messageStatus = await this.prisma.messageStatus.findUnique({
       where: {
-        messageId_userId: {
-          messageId,
-          userId,
-        },
+        messageId_userId: { messageId, userId },
       },
     });
 
@@ -252,14 +260,10 @@ export class MessagesService {
       throw new NotFoundException('Message status not found');
     }
 
-    // Only update if not already delivered
     if (messageStatus.status === DeliveryStatus.SENT) {
-      return await this.prisma.messageStatus.update({
+      return this.prisma.messageStatus.update({
         where: {
-          messageId_userId: {
-            messageId,
-            userId,
-          },
+          messageId_userId: { messageId, userId },
         },
         data: {
           status: DeliveryStatus.DELIVERED,
@@ -274,10 +278,7 @@ export class MessagesService {
   async markMessageAsRead(userId: string, messageId: string) {
     const messageStatus = await this.prisma.messageStatus.findUnique({
       where: {
-        messageId_userId: {
-          messageId,
-          userId,
-        },
+        messageId_userId: { messageId, userId },
       },
     });
 
@@ -285,50 +286,29 @@ export class MessagesService {
       throw new NotFoundException('Message status not found');
     }
 
-    return await this.prisma.messageStatus.update({
+    return this.prisma.messageStatus.update({
       where: {
-        messageId_userId: {
-          messageId,
-          userId,
-        },
+        messageId_userId: { messageId, userId },
       },
       data: {
         status: DeliveryStatus.READ,
         readAt: new Date(),
-        // Also mark as delivered if it wasn't already
         deliveredAt: messageStatus.deliveredAt || new Date(),
       },
     });
   }
 
   async markConversationAsRead(userId: string, conversationId: string) {
-    // Verify user is participant
-    const participant = await this.prisma.conversationParticipant.findFirst({
-      where: {
-        conversationId,
-        userId,
-        leftAt: null,
-      },
-    });
+    const participant = await this.verifyParticipant(conversationId, userId);
 
-    if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
-    }
-
-    // Get all unread message statuses for this user in this conversation
     const unreadStatuses = await this.prisma.messageStatus.findMany({
       where: {
         userId,
         status: { not: DeliveryStatus.READ },
-        message: {
-          conversationId,
-        },
+        message: { conversationId },
       },
     });
 
-    // Mark all as read
     await this.prisma.messageStatus.updateMany({
       where: {
         id: { in: unreadStatuses.map((s) => s.id) },
@@ -339,7 +319,6 @@ export class MessagesService {
       },
     });
 
-    // Update participant's lastReadAt
     await this.prisma.conversationParticipant.update({
       where: { id: participant.id },
       data: { lastReadAt: new Date() },
@@ -347,6 +326,10 @@ export class MessagesService {
 
     return { markedAsRead: unreadStatuses.length };
   }
+
+  // ============================================
+  // EDIT MESSAGE
+  // ============================================
 
   async editMessage(userId: string, messageId: string, newContent: string) {
     const message = await this.prisma.message.findUnique({
@@ -365,40 +348,38 @@ export class MessagesService {
       throw new BadRequestException('Cannot edit deleted message');
     }
 
-    return await this.prisma.message.update({
+    // Only TEXT messages can be edited, or caption of MEDIA messages
+    if (
+      message.type !== MessageType.TEXT &&
+      message.type !== MessageType.MEDIA
+    ) {
+      throw new BadRequestException('This message type cannot be edited');
+    }
+
+    return this.prisma.message.update({
       where: { id: messageId },
       data: {
-        content: newContent,
+        content: newContent.trim(),
         isEdited: true,
         editedAt: new Date(),
       },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
-      },
+      include: this.messageInclude,
     });
   }
 
-  /**
-   * Delete a message (soft delete)
-   * - Sender can always delete their own messages
-   * - Group admins can delete any message in their groups
-   */
+  // ============================================
+  // DELETE MESSAGE
+  // ============================================
+
   async deleteMessage(
     messageId: string,
     userId: string,
     deleteForEveryone = false,
   ) {
-    // Fetch message with conversation details
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
+        attachments: true,
         conversation: {
           include: {
             participants: {
@@ -413,7 +394,6 @@ export class MessagesService {
       throw new NotFoundException('Message not found');
     }
 
-    // Check if message is already deleted
     if (message.isDeleted) {
       throw new NotFoundException('Message has already been deleted');
     }
@@ -429,9 +409,7 @@ export class MessagesService {
     const isAdmin = userParticipant.role === 'admin';
     const isGroupCreator = message.conversation.createdBy === userId;
 
-    // For "delete for everyone"
     if (deleteForEveryone) {
-      // Only admins or creator can delete for everyone in groups
       if (message.conversation.type === 'GROUP') {
         if (!isAdmin && !isGroupCreator) {
           throw new ForbiddenException(
@@ -439,29 +417,31 @@ export class MessagesService {
           );
         }
       } else {
-        // In direct chats, only sender can delete
         if (!isSender) {
           throw new ForbiddenException('You can only delete your own messages');
         }
       }
     } else {
-      // Regular delete - only sender can delete
       if (!isSender) {
         throw new ForbiddenException('You can only delete your own messages');
       }
     }
 
-    // Perform soft delete
+    // Delete attachments from storage if deleteForEveryone
+    if (deleteForEveryone && message.attachments.length > 0) {
+      await this.deleteMessageAttachments(message.attachments);
+    }
+
+    // Soft delete message
     const deletedMessage = await this.prisma.message.update({
       where: { id: messageId },
       data: {
         isDeleted: true,
         deletedAt: new Date(),
-        content: null, // Clear content for privacy
-        mediaUrl: null, // Clear media URL
-        thumbnailUrl: null,
-        fileName: null,
-        fileSize: null,
+        type: MessageType.DELETED,
+        content: null,
+        // Attachment kayıtlarını da temizle (opsiyonel, cascade da yapabilirsin)
+        attachments: deleteForEveryone ? { deleteMany: {} } : undefined,
       },
     });
 
@@ -471,6 +451,7 @@ export class MessagesService {
         userId,
         conversationId: message.conversationId,
         deleteForEveryone,
+        attachmentsDeleted: message.attachments.length,
       },
       'Message deleted',
     );
@@ -483,42 +464,126 @@ export class MessagesService {
     };
   }
 
-  /**
-   * Permanently delete message files from storage
-   */
-  async deleteMessageFiles(messageId: string) {
-    const message = await this.prisma.message.findUnique({
-      where: { id: messageId },
-    });
+  // ============================================
+  // ATTACHMENT OPERATIONS
+  // ============================================
 
-    if (!message || !message.mediaUrl) {
-      return;
+  private async deleteMessageAttachments(
+    attachments: {
+      fileKey: string;
+      bucket: string;
+      thumbnailKey: string | null;
+    }[],
+  ) {
+    const deletePromises: Promise<void>[] = [];
+
+    for (const attachment of attachments) {
+      // Delete main file
+      deletePromises.push(
+        this.storageService
+          .delete(attachment.bucket as StorageBucket, attachment.fileKey)
+          .catch((err) => {
+            this.logger.warn(
+              { fileKey: attachment.fileKey, error: err.message },
+              'Failed to delete attachment file',
+            );
+          }),
+      );
+
+      // Delete thumbnail if exists
+      if (attachment.thumbnailKey) {
+        deletePromises.push(
+          this.storageService
+            .delete(StorageBucket.THUMBNAILS, attachment.thumbnailKey)
+            .catch((err) => {
+              this.logger.warn(
+                { thumbnailKey: attachment.thumbnailKey, error: err.message },
+                'Failed to delete thumbnail',
+              );
+            }),
+        );
+      }
     }
 
-    // Extract file key from URL
-    // Assuming mediaUrl is like: http://localhost:9000/echola-media/messages/file.jpg
-    const urlParts = message.mediaUrl.split('/');
-    const fileKey = urlParts.slice(-2).join('/'); // "messages/file.jpg"
-
-    await this.storageService.deleteFile(fileKey);
-
-    this.logger.log(
-      { messageId, fileKey },
-      'Message files deleted from storage',
-    );
+    await Promise.all(deletePromises);
   }
+
+  // ============================================
+  // UNREAD COUNT
+  // ============================================
 
   async getUnreadCount(userId: string, conversationId: string) {
     const count = await this.prisma.messageStatus.count({
       where: {
         userId,
         status: { not: DeliveryStatus.READ },
-        message: {
-          conversationId,
-        },
+        message: { conversationId },
       },
     });
 
     return { unreadCount: count };
+  }
+
+  // ============================================
+  // HELPER METHODS
+  // ============================================
+
+  private async verifyParticipant(conversationId: string, userId: string) {
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException(
+        'You are not a participant in this conversation',
+      );
+    }
+
+    return participant;
+  }
+
+  private async verifyReplyToMessage(
+    replyToId: string,
+    conversationId: string,
+  ) {
+    const replyToMessage = await this.prisma.message.findUnique({
+      where: { id: replyToId },
+    });
+
+    if (!replyToMessage || replyToMessage.conversationId !== conversationId) {
+      throw new BadRequestException(
+        'Reply-to message not found in this conversation',
+      );
+    }
+
+    return replyToMessage;
+  }
+
+  private async getRecipients(conversationId: string, excludeUserId: string) {
+    return this.prisma.conversationParticipant.findMany({
+      where: {
+        conversationId,
+        userId: { not: excludeUserId },
+        leftAt: null,
+      },
+    });
+  }
+
+  private async touchConversation(conversationId: string) {
+    await this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { updatedAt: new Date() },
+    });
+  }
+
+  private determineMediaType(mimeType: string): MediaType {
+    if (mimeType.startsWith('image/')) return MediaType.IMAGE;
+    if (mimeType.startsWith('video/')) return MediaType.VIDEO;
+    if (mimeType.startsWith('audio/')) return MediaType.AUDIO;
+    return MediaType.DOCUMENT;
   }
 }

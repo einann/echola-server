@@ -18,15 +18,10 @@ import { ConnectionHandler } from '../connection/connection.handler';
 import { MessagesHandler } from '../messages/messages.handler';
 import { ReactionsHandler } from '../messages/reactions.handler';
 import { PresenceHandler } from '../presence/presence.handler';
-import { StorageHandler } from '../storage/storage.handler';
 import { GroupsHandler } from '../conversations/groups.handler';
 import { RedisService } from '../redis/redis.service';
 
 import { TypingEvent } from '../presence/dto/typing-events.dto';
-import {
-  RequestFileUploadEvent,
-  ConfirmFileUploadEvent,
-} from '../storage/dto/file-upload-events.dto';
 import {
   AddMembersDto,
   LeaveGroupDto,
@@ -34,7 +29,11 @@ import {
   UpdateGroupInfoDto,
   UpdateMemberRoleDto,
 } from '../conversations/dto/group-management.dto';
-import { SendMessageEvent } from '../messages/dto/send-message-events.dto';
+import {
+  ConfirmMediaUploadEvent,
+  RequestMediaUploadEvent,
+  SendTextMessageEvent,
+} from '../messages/dto/send-message-events.dto';
 import {
   AddReactionEvent,
   RemoveReactionEvent,
@@ -47,6 +46,7 @@ import { JwtPayload } from './types/jwt.types';
 import { RedisConversationEvent } from '../redis/types/redis-data.types';
 import { AllWsExceptionsFilter } from '../common/filters/ws-exception.filter';
 import { EnvironmentVariables } from 'src/config/env.validation';
+import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
 
 @WebSocketGateway({
   cors: {
@@ -71,7 +71,6 @@ export class ChatGateway
     private messagesHandler: MessagesHandler,
     private reactionsHandler: ReactionsHandler,
     private presenceHandler: PresenceHandler,
-    private storageHandler: StorageHandler,
     private groupsHandler: GroupsHandler,
     private redisService: RedisService,
   ) {
@@ -130,36 +129,76 @@ export class ChatGateway
   // Message Events
   // ============================================
 
-  @SubscribeMessage('send_message')
-  handleSendMessage(
+  // Text message
+  @SubscribeMessage('message:send')
+  async handleSendMessage(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: SendMessageEvent,
+    @MessageBody() data: SendTextMessageEvent,
   ) {
-    return this.messagesHandler.sendMessage(client, data);
+    await this.messagesHandler.sendTextMessage(client, data);
   }
 
-  @SubscribeMessage('message_delivered')
-  handleMessageDelivered(
+  // Media upload - Step 1: Request URL
+  @SubscribeMessage('media:request_upload')
+  async handleRequestUpload(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: RequestMediaUploadEvent,
+  ) {
+    const result = await this.messagesHandler.requestMediaUpload(client, data);
+    return { event: 'media:upload_url', data: result };
+  }
+
+  // Media upload - Step 2: Confirm
+  @SubscribeMessage('media:confirm_upload')
+  async handleConfirmUpload(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: ConfirmMediaUploadEvent,
+  ) {
+    await this.messagesHandler.confirmMediaUpload(client, data);
+  }
+
+  // Message status
+  @SubscribeMessage('message:delivered')
+  async handleDelivered(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: MessageDeliveredEvent,
   ) {
-    return this.messagesHandler.markDelivered(client, data);
+    await this.messagesHandler.markDelivered(client, data);
   }
 
-  @SubscribeMessage('message_read')
-  handleMessageRead(
+  @SubscribeMessage('message:read')
+  async handleRead(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() data: MessageReadEvent,
   ) {
-    return this.messagesHandler.markRead(client, data);
+    await this.messagesHandler.markRead(client, data);
   }
 
-  @SubscribeMessage('message_delete')
-  handleMessageDelete(
+  // Delete
+  @SubscribeMessage('message:delete')
+  async handleDelete(
     @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: MessageReadEvent,
+    @MessageBody() data: DeleteMessageDto,
   ) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return this.messagesHandler.deleteMessage(client, data);
+  }
+
+  // Typing
+  @SubscribeMessage('typing:start')
+  handleTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: TypingEvent,
+  ) {
+    this.messagesHandler.handleTyping(client, data);
+  }
+
+  @SubscribeMessage('typing:stop')
+  handleStopTyping(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: TypingEvent,
+  ) {
+    this.messagesHandler.handleStopTyping(client, data);
   }
 
   // ============================================
@@ -214,21 +253,21 @@ export class ChatGateway
   // File Upload Events
   // ============================================
 
-  @SubscribeMessage('file:upload:request')
-  handleFileUploadRequest(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: RequestFileUploadEvent,
-  ) {
-    return this.storageHandler.requestUpload(client, data);
-  }
+  // @SubscribeMessage('file:upload:request')
+  // handleFileUploadRequest(
+  //   @ConnectedSocket() client: AuthenticatedSocket,
+  //   @MessageBody() data: RequestFileUploadEvent,
+  // ) {
+  //   return this.storageHandler.requestUpload(client, data);
+  // }
 
-  @SubscribeMessage('file:upload:complete')
-  handleFileUploadComplete(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: ConfirmFileUploadEvent,
-  ) {
-    return this.storageHandler.confirmUpload(client, data);
-  }
+  // @SubscribeMessage('file:upload:complete')
+  // handleFileUploadComplete(
+  //   @ConnectedSocket() client: AuthenticatedSocket,
+  //   @MessageBody() data: ConfirmFileUploadEvent,
+  // ) {
+  //   return this.storageHandler.confirmUpload(client, data);
+  // }
 
   // ============================================
   // Group Management Events

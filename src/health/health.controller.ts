@@ -7,7 +7,7 @@ import {
 } from '@nestjs/terminus';
 import { PrismaHealthIndicator } from './indicators/prisma-health.indicator';
 import { RedisHealthIndicator } from './indicators/redis-health.indicator';
-import { MinioHealthIndicator } from './indicators/minio-health.indicator';
+// import { MinioHealthIndicator } from './indicators/minio-health.indicator';
 
 @Controller('health')
 export class HealthController {
@@ -15,7 +15,7 @@ export class HealthController {
     private health: HealthCheckService,
     private prismaHealth: PrismaHealthIndicator,
     private redisHealth: RedisHealthIndicator,
-    private minioHealth: MinioHealthIndicator,
+    // private minioHealth: MinioHealthIndicator,
     private memory: MemoryHealthIndicator,
     private disk: DiskHealthIndicator,
   ) {}
@@ -31,7 +31,7 @@ export class HealthController {
       () => this.redisHealth.isHealthy('redis'),
 
       // MinIO/S3 health
-      () => this.minioHealth.isHealthy('storage'),
+      // () => this.minioHealth.isHealthy('storage'),
 
       // Memory health (heap should not exceed 150MB)
       () => this.memory.checkHeap('memory_heap', 150 * 1024 * 1024),

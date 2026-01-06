@@ -11,9 +11,9 @@ import {
   Query,
 } from '@nestjs/common';
 import { MessagesService } from './messages.service';
-import { SendMessageDto } from '../conversations/dto/send-message.dto';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { DeleteMessageDto } from './dto/delete-message.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 
 @Controller('messages')
 @UseGuards(JwtAccessGuard)

@@ -5,10 +5,10 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { ReactionsService } from './reactions.service';
 import { MessagesHandler } from './messages.handler';
 import { ReactionsHandler } from './reactions.handler';
-import { StorageModule } from 'src/storage/storage.module';
+import { MediaModule } from 'src/media/media.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule],
+  imports: [PrismaModule, MediaModule],
   controllers: [MessagesController],
   providers: [
     MessagesService,

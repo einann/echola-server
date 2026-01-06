@@ -1,92 +1,118 @@
 import {
   Controller,
   Post,
+  Get,
+  Delete,
   Body,
+  Param,
   UseGuards,
-  Request,
   UseInterceptors,
   UploadedFile,
-  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
-import { StorageOrchestrationService } from './storage-orchestration.service';
-import { RequestUploadUrlDto } from './dto/request-upload-url.dto';
-import { ConfirmUploadDto } from './dto/confirm-upload.dto';
+import { StorageService } from './storage.service';
+import { StorageBucket } from './enums';
+import { JwtAccessGuard } from 'src/auth/guards/jwt-access.guard';
 
+// Only for development/testing - remove in production!
 @Controller('storage')
 @UseGuards(JwtAccessGuard)
 export class StorageController {
-  constructor(
-    private storageOrchestrationService: StorageOrchestrationService,
-  ) {}
+  constructor(private readonly storageService: StorageService) {}
 
   /**
-   * Request presigned URL for client-side upload
+   * POST /storage/presigned-url
+   * Test: Presigned URL üret
    */
-  @Post('request-url')
-  async requestUploadUrl(@Body() dto: RequestUploadUrlDto) {
-    const result = await this.storageOrchestrationService.requestPresignedUrl({
-      fileName: dto.fileName,
-      mimeType: dto.mimeType,
-      fileType: dto.fileType,
-      fileSize: dto.fileSize,
-    });
-
-    return {
-      ...result,
-      instructions: 'Use PUT request to upload file directly to this URL',
-    };
-  }
-
-  /**
-   * Confirm upload and process file
-   */
-  @Post('confirm')
-  async confirmUpload(@Request() req, @Body() dto: ConfirmUploadDto) {
-    const userId = req.user.userId;
-
-    const message =
-      await this.storageOrchestrationService.confirmAndProcessUpload(userId, {
-        fileKey: dto.fileKey,
-        fileName: dto.fileName,
-        fileType: dto.fileType,
-        conversationId: dto.conversationId,
-      });
-
-    return {
-      success: true,
-      message,
-    };
-  }
-
-  /**
-   * Direct upload endpoint (alternative flow)
-   */
-  @Post('direct')
-  @UseInterceptors(FileInterceptor('file'))
-  async directUpload(
-    @Request() req,
-    @UploadedFile() file: Express.Multer.File,
-    @Body('conversationId') conversationId: string,
-    @Body('fileType') fileType: 'image' | 'video' | 'audio' | 'document',
+  @Post('presigned-url')
+  async generatePresignedUrl(
+    @Body()
+    dto: {
+      bucket: StorageBucket;
+      fileKey: string;
+      contentType: string;
+      expiresIn?: number;
+    },
   ) {
-    if (!file) {
-      throw new BadRequestException('No file provided');
-    }
+    return this.storageService.generatePresignedUploadUrl(
+      dto.bucket,
+      dto.fileKey,
+      dto.contentType,
+      dto.expiresIn,
+    );
+  }
 
-    const userId = req.user.userId;
+  /**
+   * POST /storage/upload
+   * Test: Direkt dosya yükle (multipart)
+   */
+  @Post('upload/:bucket')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFile(
+    @Param('bucket') bucket: StorageBucket,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('fileKey') fileKey?: string,
+  ) {
+    const key = fileKey || `test/${Date.now()}-${file.originalname}`;
 
-    const message = await this.storageOrchestrationService.processDirectUpload({
-      file,
-      fileType,
-      conversationId,
-      userId,
-    });
+    const result = await this.storageService.uploadBuffer(
+      bucket,
+      key,
+      file.buffer,
+      file.mimetype,
+    );
 
     return {
       success: true,
-      message,
+      data: result,
+    };
+  }
+
+  /**
+   * GET /storage/download-url/:bucket/:key
+   * Test: Download URL al
+   */
+  @Get('download-url/:bucket/*')
+  async getDownloadUrl(
+    @Param('bucket') bucket: StorageBucket,
+    @Param() params: { bucket: string; path: string[] },
+  ) {
+    const fileKey = params.path.join('/');
+    const url = await this.storageService.generatePresignedDownloadUrl(
+      bucket,
+      fileKey,
+    );
+
+    return { url };
+  }
+
+  /**
+   * DELETE /storage/:bucket/:key
+   * Test: Dosya sil
+   * TODO: yukarıdaki gibi düzeltilecek.
+   */
+  @Delete(':bucket/*')
+  async deleteFile(
+    @Param('bucket') bucket: StorageBucket,
+    @Param() params: { bucket: string; path: string[] },
+  ) {
+    const fileKey = params.path.join('/');
+    await this.storageService.delete(bucket, fileKey);
+
+    return {
+      success: true,
+      message: `Deleted ${bucket}/${fileKey}`,
+    };
+  }
+
+  /**
+   * GET /storage/buckets
+   * Test: Mevcut bucket'ları listele
+   */
+  @Get('buckets')
+  getBuckets() {
+    return {
+      buckets: Object.values(StorageBucket),
     };
   }
 }
