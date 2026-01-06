@@ -5,15 +5,20 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ConversationParticipant,
   ConversationType,
 } from 'generated/prisma/client';
+import { EnvironmentVariables } from '../config/env.validation';
 
 @Injectable()
 export class GroupManagementService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService<EnvironmentVariables>,
+  ) {}
 
   // ============================================
   // Permission Checks
@@ -86,6 +91,27 @@ export class GroupManagementService {
   async addMembers(adminId: string, conversationId: string, userIds: string[]) {
     // Verify admin permissions
     await this.verifyGroupAdmin(adminId, conversationId);
+
+    // Check current group size
+    const currentMembersCount = await this.prisma.conversationParticipant.count(
+      {
+        where: {
+          conversationId,
+          leftAt: null,
+        },
+      },
+    );
+
+    const maxGroupSize = this.configService.get('MAX_GROUP_SIZE', {
+      infer: true,
+    }) as number; // Non-null assertion: validated in env.validation.ts
+    const newTotalSize = currentMembersCount + userIds.length;
+
+    if (newTotalSize > maxGroupSize) {
+      throw new BadRequestException(
+        `Cannot add ${userIds.length} members. Group size limit is ${maxGroupSize}. Current size: ${currentMembersCount}`,
+      );
+    }
 
     // Verify all users exist
     const users = await this.prisma.user.findMany({

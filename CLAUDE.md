@@ -183,7 +183,7 @@ Required env vars (see `.env.example`):
 - App: `PORT`, `NODE_ENV`, `FRONTEND_URL`
 - Monitoring: `SENTRY_DSN`
 - Email/SMPT: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
-- Limits: `MAX_IMAGE_SIZE`, `MAX_VIDEO_SIZE`, `MAX_DOCUMENT_SIZE`
+- Limits: `MAX_IMAGE_SIZE`, `MAX_VIDEO_SIZE`, `MAX_DOCUMENT_SIZE`, `MAX_GROUP_SIZE`
 
 ### Logging
 

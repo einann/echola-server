@@ -4,8 +4,7 @@
 
 @baseUrl = http://localhost:3000
 @contentType = application/json
-@token = YOUR_ACCESS_TOKEN_HERE
-
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc3MDY0ODksImV4cCI6MTc2Nzc0OTY4OX0.co5CtJXGZEoU5j3AR_j-EcVJO_nIyRK4u3731i-tpxc
 ### Create Direct Conversation
 POST {{baseUrl}}/conversations
 Content-Type: {{contentType}}
@@ -13,7 +12,7 @@ Authorization: Bearer {{token}}
 
 {
   "type": "DIRECT",
-  "participantIds": ["user-id-of-other-person"]
+  "participantIds": ["121b6903-c359-494a-913f-6a651952f5e7"]
 }
 
 ### Create Group Conversation
@@ -23,7 +22,7 @@ Authorization: Bearer {{token}}
 
 {
   "type": "GROUP",
-  "participantIds": ["user-id-1", "user-id-2", "user-id-3"],
+  "participantIds": ["462d51ff-8e29-48a5-99b9-a23ee6813332", "121b6903-c359-494a-913f-6a651952f5e7"],
   "name": "Project Team",
   "description": "Team discussion for the new project",
   "avatarUrl": "https://example.com/group-avatar.jpg"
@@ -34,5 +33,5 @@ GET {{baseUrl}}/conversations
 Authorization: Bearer {{token}}
 
 ### Get Conversation by ID
-GET {{baseUrl}}/conversations/conversation-uuid-here
+GET {{baseUrl}}/conversations/d3970c8f-f7d7-42e7-bb28-85de5713523a
 Authorization: Bearer {{token}}

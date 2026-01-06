@@ -141,6 +141,13 @@ export class EnvironmentVariables {
   @IsNumber()
   @Min(1)
   MAX_DOCUMENT_SIZE: number;
+
+  // ============================================
+  // Conversation Limits
+  // ============================================
+  @IsNumber()
+  @Min(2)
+  MAX_GROUP_SIZE: number;
 }
 
 export function validate(config: Record<string, unknown>) {

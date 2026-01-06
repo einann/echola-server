@@ -6,9 +6,11 @@ import {
   Param,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
+import { PaginationQueryDto } from './dto/pagination.dto';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 
 @Controller('conversations')
@@ -28,8 +30,14 @@ export class ConversationsController {
   }
 
   @Get()
-  async getUserConversations(@Request() req) {
-    return this.conversationsService.getUserConversations(req.user.userId);
+  async getUserConversations(
+    @Request() req,
+    @Query() paginationQuery: PaginationQueryDto,
+  ) {
+    return this.conversationsService.getUserConversations(req.user.userId, {
+      limit: paginationQuery.limit,
+      cursor: paginationQuery.cursor,
+    });
   }
 
   @Get(':id')

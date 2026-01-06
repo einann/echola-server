@@ -8,6 +8,8 @@ import {
   ArrayMinSize,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { sanitizeString } from '../../common/utils/sanitize.util';
 
 export class AddMembersDto {
   @IsUUID()
@@ -57,11 +59,13 @@ export class UpdateGroupInfoDto {
   @IsOptional()
   @IsString()
   @MaxLength(100)
+  @Transform(({ value }) => sanitizeString(value))
   name?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @Transform(({ value }) => sanitizeString(value))
   description?: string;
 
   @IsOptional()

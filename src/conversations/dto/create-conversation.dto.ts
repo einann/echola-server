@@ -6,7 +6,9 @@ import {
   MinLength,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ConversationType } from 'generated/prisma/client';
+import { sanitizeString } from '../../common/utils/sanitize.util';
 
 export class CreateConversationDto {
   @IsEnum(ConversationType)
@@ -23,11 +25,13 @@ export class CreateConversationDto {
   @IsString()
   @MinLength(1)
   @MaxLength(100)
+  @Transform(({ value }) => sanitizeString(value))
   name?: string;
 
   @IsOptional()
   @IsString()
   @MaxLength(500)
+  @Transform(({ value }) => sanitizeString(value))
   description?: string;
 
   @IsOptional()

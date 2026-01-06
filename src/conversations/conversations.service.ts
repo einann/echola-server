@@ -4,13 +4,18 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ConversationType } from 'generated/prisma/client';
+import { EnvironmentVariables } from '../config/env.validation';
 
 @Injectable()
 export class ConversationsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService<EnvironmentVariables>,
+  ) {}
 
   async createConversation(userId: string, createDto: CreateConversationDto) {
     const { type, participantIds, name, description, avatarUrl } = createDto;
@@ -27,6 +32,20 @@ export class ConversationsService {
       throw new BadRequestException(
         'Group conversation must have at least one other participant',
       );
+    }
+
+    // Validation: GROUP size limit (including creator)
+    if (type === ConversationType.GROUP) {
+      const maxGroupSize = this.configService.get('MAX_GROUP_SIZE', {
+        infer: true,
+      }) as number; // Non-null assertion: validated in env.validation.ts
+      const totalParticipants = participantIds.length + 1; // +1 for creator
+
+      if (totalParticipants > maxGroupSize) {
+        throw new BadRequestException(
+          `Group size cannot exceed ${maxGroupSize} members. You are trying to add ${totalParticipants} members.`,
+        );
+      }
     }
 
     // Check if DIRECT conversation already exists
@@ -94,12 +113,37 @@ export class ConversationsService {
     return conversation;
   }
 
-  async getUserConversations(userId: string) {
+  async getUserConversations(
+    userId: string,
+    options?: { limit?: number; cursor?: string },
+  ) {
+    const limit = options?.limit || 20;
+    const cursor = options?.cursor;
+
+    // Build where clause with cursor for pagination
+    const whereClause = {
+      userId,
+      leftAt: null, // Only active conversations
+      conversation: {},
+    };
+
+    // If cursor provided, get conversations updated before that conversation
+    if (cursor) {
+      const cursorConversation = await this.prisma.conversation.findUnique({
+        where: { id: cursor },
+        select: { updatedAt: true },
+      });
+
+      if (cursorConversation) {
+        whereClause.conversation = {
+          updatedAt: { lt: cursorConversation.updatedAt },
+        };
+      }
+    }
+
     const participants = await this.prisma.conversationParticipant.findMany({
-      where: {
-        userId,
-        leftAt: null, // Only active conversations
-      },
+      where: whereClause,
+      take: limit + 1, // Fetch one extra to check if there's more
       include: {
         conversation: {
           include: {
@@ -142,11 +186,37 @@ export class ConversationsService {
       },
     });
 
-    return participants.map((p) => ({
-      ...p.conversation,
-      lastMessage: p.conversation.messages[0] || null,
-      unreadCount: 0, // Will implement this later
-    }));
+    // Check if there are more results
+    const hasMore = participants.length > limit;
+    const items = hasMore ? participants.slice(0, limit) : participants;
+
+    // Calculate unread counts for all conversations
+    const conversationsWithUnread = await Promise.all(
+      items.map(async (p) => {
+        const unreadCount = await this.prisma.message.count({
+          where: {
+            conversationId: p.conversation.id,
+            senderId: { not: userId },
+            createdAt: p.lastReadAt ? { gt: p.lastReadAt } : undefined, // If never read, count all messages from others
+            isDeleted: false,
+          },
+        });
+
+        return {
+          ...p.conversation,
+          lastMessage: p.conversation.messages[0] || null,
+          unreadCount,
+        };
+      }),
+    );
+
+    return {
+      data: conversationsWithUnread,
+      pagination: {
+        hasMore,
+        nextCursor: hasMore ? items[items.length - 1].conversation.id : null,
+      },
+    };
   }
 
   async getConversationById(userId: string, conversationId: string) {
@@ -195,18 +265,22 @@ export class ConversationsService {
   }
 
   private async findDirectConversation(user1Id: string, user2Id: string) {
-    const conversation = await this.prisma.conversation.findFirst({
+    // Find all DIRECT conversations where user1 is an active participant
+    const conversations = await this.prisma.conversation.findMany({
       where: {
         type: ConversationType.DIRECT,
         participants: {
-          every: {
-            userId: { in: [user1Id, user2Id] },
+          some: {
+            userId: user1Id,
             leftAt: null,
           },
         },
       },
       include: {
         participants: {
+          where: {
+            leftAt: null,
+          },
           include: {
             user: {
               select: {
@@ -224,11 +298,16 @@ export class ConversationsService {
       },
     });
 
-    // Verify it has exactly 2 participants
-    if (conversation && conversation.participants.length === 2) {
-      return conversation;
-    }
+    // Find the conversation with exactly 2 participants: user1 and user2
+    const existingConversation = conversations.find((conv) => {
+      if (conv.participants.length !== 2) return false;
 
-    return null;
+      const participantIds = conv.participants.map((p) => p.userId);
+      return (
+        participantIds.includes(user1Id) && participantIds.includes(user2Id)
+      );
+    });
+
+    return existingConversation || null;
   }
 }

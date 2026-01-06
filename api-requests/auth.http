@@ -11,13 +11,13 @@ POST {{baseUrl}}/auth/register
 Content-Type: {{contentType}}
 
 {
-  "email": "ebubekirinan94@gmail.com",
-  "password": "Garage1998+",
-  "displayName": "Ebubekir INAN",
-  "username": "einann",
-  "deviceId": "einan-macbook",
-  "deviceName": "Einan MacBook Pro",
-  "deviceType": "desktop"
+  "email": "baska@example.com",
+  "password": "Deneme123.",
+  "displayName": "Baska Kullanici",
+  "username": "baskaa",
+  "deviceId": "test-macbook",
+  "deviceName": "Test MacBook Pro",
+  "deviceType": "web"
 }
 
 ### Login
