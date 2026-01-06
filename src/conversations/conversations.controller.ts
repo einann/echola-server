@@ -45,6 +45,9 @@ export class ConversationsController {
     return this.conversationsService.getUserConversations(req.user.userId, {
       limit: paginationQuery.limit,
       cursor: paginationQuery.cursor,
+      search: paginationQuery.search,
+      type: paginationQuery.type,
+      muted: paginationQuery.muted,
     });
   }
 

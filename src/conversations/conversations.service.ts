@@ -115,17 +115,83 @@ export class ConversationsService {
 
   async getUserConversations(
     userId: string,
-    options?: { limit?: number; cursor?: string },
+    options?: {
+      limit?: number;
+      cursor?: string;
+      search?: string;
+      type?: ConversationType;
+      muted?: boolean;
+    },
   ) {
     const limit = options?.limit || 20;
     const cursor = options?.cursor;
+    const search = options?.search;
+    const type = options?.type;
+    const muted = options?.muted;
 
     // Build where clause with cursor for pagination
     const whereClause = {
       userId,
       leftAt: null, // Only active conversations
       conversation: {},
+      isMuted: false,
     };
+
+    // Apply muted filter
+    if (muted !== undefined) {
+      whereClause.isMuted = muted;
+    }
+
+    // Build conversation filter
+    const conversationFilter: any = {};
+
+    // Apply type filter
+    if (type) {
+      conversationFilter.type = type;
+    }
+
+    // Apply search filter (search in group name or participant names)
+    if (search) {
+      conversationFilter.OR = [
+        // Search in group name
+        {
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        // Search in participant names
+        {
+          participants: {
+            some: {
+              leftAt: null,
+              user: {
+                OR: [
+                  {
+                    displayName: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    username: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
+                  {
+                    email: {
+                      contains: search,
+                      mode: 'insensitive',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ];
+    }
 
     // If cursor provided, get conversations updated before that conversation
     if (cursor) {
@@ -135,11 +201,12 @@ export class ConversationsService {
       });
 
       if (cursorConversation) {
-        whereClause.conversation = {
-          updatedAt: { lt: cursorConversation.updatedAt },
-        };
+        conversationFilter.updatedAt = { lt: cursorConversation.updatedAt };
       }
     }
+
+    // Merge conversation filters
+    whereClause.conversation = conversationFilter;
 
     const participants = await this.prisma.conversationParticipant.findMany({
       where: whereClause,

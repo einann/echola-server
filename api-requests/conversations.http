@@ -4,7 +4,7 @@
 
 @baseUrl = http://localhost:3000
 @contentType = application/json
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc3MDg4NTUsImV4cCI6MTc2Nzc1MjA1NX0.fy1e-nzJnOm6u8pmpGZl20peB4pGBLjUGzXIXXvPyuo
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc3MTAwNzUsImV4cCI6MTc2Nzc1MzI3NX0._5OPDYLeZJfZgdX51asobE8PKg9NFwhPdfFouEZd5HU
 ### Create Direct Conversation
 POST {{baseUrl}}/conversations
 Content-Type: {{contentType}}
@@ -34,6 +34,22 @@ Authorization: Bearer {{token}}
 
 ### Get All My Conversations (with pagination)
 GET {{baseUrl}}/conversations?limit=20&cursor=6efc7eb5-f391-48bb-9188-185536c2a9d3
+Authorization: Bearer {{token}}
+
+### Search Conversations by name or participant
+GET {{baseUrl}}/conversations?search=john
+Authorization: Bearer {{token}}
+
+### Filter Conversations by type (DIRECT or GROUP)
+GET {{baseUrl}}/conversations?type=GROUP
+Authorization: Bearer {{token}}
+
+### Filter Muted Conversations
+GET {{baseUrl}}/conversations?muted=true
+Authorization: Bearer {{token}}
+
+### Combined Search and Filters
+GET {{baseUrl}}/conversations?search=project&type=GROUP&muted=false&limit=10
 Authorization: Bearer {{token}}
 
 ### Get Conversation by ID

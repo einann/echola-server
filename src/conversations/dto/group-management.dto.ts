@@ -7,6 +7,7 @@ import {
   IsEnum,
   ArrayMinSize,
   MaxLength,
+  IsUrl,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { sanitizeString } from '../../common/utils/sanitize.util';
@@ -69,6 +70,6 @@ export class UpdateGroupInfoDto {
   description?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({}, { message: 'avatarUrl must be a valid URL' })
   avatarUrl?: string;
 }

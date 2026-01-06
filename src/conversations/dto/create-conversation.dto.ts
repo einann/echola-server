@@ -5,6 +5,7 @@ import {
   IsArray,
   MinLength,
   MaxLength,
+  IsUrl,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ConversationType } from 'generated/prisma/client';
@@ -35,6 +36,6 @@ export class CreateConversationDto {
   description?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUrl({}, { message: 'avatarUrl must be a valid URL' })
   avatarUrl?: string;
 }

@@ -184,7 +184,10 @@ model Conversation {
   participants ConversationParticipant[]
   messages     Message[]
   creator      User?                     @relation("ConversationCreator", fields: [createdBy], references: [id])
-  
+
+  @@index([type, updatedAt(sort: Desc)])  // For filtering by type and sorting
+  @@index([updatedAt(sort: Desc)])        // For pagination sorting
+  @@index([name])                          // For search by name
   @@map("conversations")
 }
 
@@ -211,6 +214,8 @@ model ConversationParticipant {
   @@unique([conversationId, userId])
   @@index([userId])
   @@index([conversationId])
+  @@index([userId, leftAt, isMuted])  // For filtering active/muted conversations
+  @@index([leftAt])                    // For filtering deleted conversations
   @@map("conversation_participants")
 }
 
