@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsBoolean,
   IsUrl,
+  IsEmail,
   validateSync,
   Min,
   IsOptional,
@@ -103,6 +104,28 @@ export class EnvironmentVariables {
   @IsOptional()
   @IsString()
   SENTRY_DSN?: string;
+
+  // ============================================
+  // SMTP Configuration
+  // ============================================
+  @IsString()
+  SMTP_HOST: string;
+
+  @IsNumber()
+  @Min(1)
+  SMTP_PORT: number;
+
+  @IsBoolean()
+  SMTP_SECURE: boolean;
+
+  @IsEmail()
+  SMTP_USER: string;
+
+  @IsString()
+  SMTP_PASS: string;
+
+  @IsEmail()
+  SMTP_FROM: string;
 
   // ============================================
   // File Upload Limits (in bytes)

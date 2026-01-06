@@ -18,6 +18,8 @@ import { validate } from './config/env.validation';
 import { HealthModule } from './health/health.module';
 import { MediaModule } from './media/media.module';
 import { StorageModule } from './storage/storage.module';
+import { UsersModule } from './users/users.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -27,6 +29,7 @@ import { StorageModule } from './storage/storage.module';
       validate,
     }),
     LoggerModule,
+    EmailModule,
     AuthModule,
     ConnectionModule,
     ConversationsModule,
@@ -39,6 +42,7 @@ import { StorageModule } from './storage/storage.module';
     RedisModule,
     StorageModule,
     SocketModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
