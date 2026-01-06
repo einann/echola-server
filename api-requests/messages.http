@@ -1,0 +1,84 @@
+### ==================================================
+### MESSAGE ENDPOINTS
+### ==================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### Send Message
+POST {{baseUrl}}/messages
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "conversationId": "conversation-uuid-here",
+  "content": "Hello, this is a test message!"
+}
+
+### Send Reply to Message
+POST {{baseUrl}}/messages
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "conversationId": "conversation-uuid-here",
+  "content": "This is a reply to your message",
+  "replyToId": "message-uuid-to-reply-to"
+}
+
+### Get Messages from Conversation
+# Default: 50 messages
+GET {{baseUrl}}/messages/conversation/conversation-uuid-here
+Authorization: Bearer {{token}}
+
+### Get Messages with Pagination
+# Get 20 messages before a specific message ID
+GET {{baseUrl}}/messages/conversation/conversation-uuid-here?limit=20&before=message-uuid
+Authorization: Bearer {{token}}
+
+### Mark Message as Delivered
+PUT {{baseUrl}}/messages/message-uuid-here/delivered
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+### Mark Message as Read
+PUT {{baseUrl}}/messages/message-uuid-here/read
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+### Mark All Messages in Conversation as Read
+PUT {{baseUrl}}/messages/conversation/conversation-uuid-here/read
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+### Edit Message
+PUT {{baseUrl}}/messages/message-uuid-here
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "content": "This is the edited message content"
+}
+
+### Delete Message (For Me Only)
+DELETE {{baseUrl}}/messages/message-uuid-here
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "deleteForEveryone": false
+}
+
+### Delete Message (For Everyone)
+DELETE {{baseUrl}}/messages/message-uuid-here
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "deleteForEveryone": true
+}
+
+### Get Unread Count for Conversation
+GET {{baseUrl}}/messages/conversation/conversation-uuid-here/unread-count
+Authorization: Bearer {{token}}

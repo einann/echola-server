@@ -19,6 +19,12 @@ import { EnvironmentVariables } from 'src/config/env.validation';
             user: configService.get('SMTP_USER', { infer: true }),
             pass: configService.get('SMTP_PASS', { infer: true }),
           },
+          // Required for port 587 with STARTTLS (Gmail, etc.)
+          requireTLS: true,
+          tls: {
+            // For development - accept self-signed certificates
+            rejectUnauthorized: false,
+          },
         },
         defaults: {
           from: `"Echola" <${configService.get('SMTP_FROM', { infer: true })}>`,

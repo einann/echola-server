@@ -1,0 +1,54 @@
+### ==================================================
+### AUTHENTICATION ENDPOINTS
+### ==================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### Register New User
+POST {{baseUrl}}/auth/register
+Content-Type: {{contentType}}
+
+{
+  "email": "ebubekirinan94@gmail.com",
+  "password": "Garage1998+",
+  "displayName": "Ebubekir INAN",
+  "username": "einann",
+  "deviceId": "einan-macbook",
+  "deviceName": "Einan MacBook Pro",
+  "deviceType": "desktop"
+}
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "ebubekirinan94@gmail.com",
+  "password": "Garage1998+",
+  "deviceId": "einan-macbook",
+  "deviceName": "Einan MacBook Pro",
+  "deviceType": "desktop",
+  "fcmToken": "optional-fcm-token-for-push-notifications"
+}
+
+### Refresh Tokens
+POST {{baseUrl}}/auth/refresh
+Content-Type: {{contentType}}
+
+{
+  "refreshToken": "your-refresh-token-here",
+  "deviceId": "device-12345"
+}
+
+### Logout (Current Device)
+POST {{baseUrl}}/auth/logout
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+### Logout All Devices
+POST {{baseUrl}}/auth/logout-all
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}

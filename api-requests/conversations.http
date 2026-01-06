@@ -1,0 +1,38 @@
+### ==================================================
+### CONVERSATION ENDPOINTS
+### ==================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### Create Direct Conversation
+POST {{baseUrl}}/conversations
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "type": "DIRECT",
+  "participantIds": ["user-id-of-other-person"]
+}
+
+### Create Group Conversation
+POST {{baseUrl}}/conversations
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "type": "GROUP",
+  "participantIds": ["user-id-1", "user-id-2", "user-id-3"],
+  "name": "Project Team",
+  "description": "Team discussion for the new project",
+  "avatarUrl": "https://example.com/group-avatar.jpg"
+}
+
+### Get All My Conversations
+GET {{baseUrl}}/conversations
+Authorization: Bearer {{token}}
+
+### Get Conversation by ID
+GET {{baseUrl}}/conversations/conversation-uuid-here
+Authorization: Bearer {{token}}

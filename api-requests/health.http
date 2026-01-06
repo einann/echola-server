@@ -1,0 +1,19 @@
+### ==================================================
+### HEALTH CHECK ENDPOINTS
+### ==================================================
+### NOTE: These endpoints do not require authentication
+
+@baseUrl = http://localhost:3000
+
+### Full Health Check
+# Checks database, redis, memory, and disk
+GET {{baseUrl}}/health
+
+### Liveness Probe
+# Checks if the app is running
+GET {{baseUrl}}/health/live
+
+### Readiness Probe
+# Checks if the app is ready to receive traffic
+# Validates critical dependencies (database, redis)
+GET {{baseUrl}}/health/ready

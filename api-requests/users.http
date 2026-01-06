@@ -1,0 +1,115 @@
+### ==================================================
+### USER ENDPOINTS
+### ==================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc2OTk5NDgsImV4cCI6MTc2Nzc0MzE0OH0.PlC8MGbZVT6vOJJHzCnDE-Bi2jU9oOKI04gGeARm8Z4
+
+### ========================================
+### Profile Management
+### ========================================
+
+### Get My Profile
+GET {{baseUrl}}/users/me
+Authorization: Bearer {{token}}
+
+### Update My Profile
+PUT {{baseUrl}}/users/me
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "displayName": "John Updated",
+  "username": "johnupdated",
+  "bio": "Software developer and tech enthusiast",
+  "statusMessage": "Available for chat"
+}
+
+### Change Password
+POST {{baseUrl}}/users/me/change-password
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "currentPassword": "SecurePass123!",
+  "newPassword": "NewSecurePass456!"
+}
+
+### ========================================
+### Avatar Upload
+### ========================================
+
+### Request Avatar Upload URL
+POST {{baseUrl}}/users/me/avatar/request-upload
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "fileName": "avatar.jpg",
+  "mimeType": "image/jpeg",
+  "fileSize": 524288
+}
+
+### Confirm Avatar Upload
+POST {{baseUrl}}/users/me/avatar/confirm-upload
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "fileKey": "avatars/462d51ff-8e29-48a5-99b9-a23ee6813332/94ee214453c16a21b1389e5d21611872.jpg"
+}
+
+### ========================================
+### User Search
+### ========================================
+
+### Search Users
+GET {{baseUrl}}/users/search?query=ebu&limit=10
+Authorization: Bearer {{token}}
+
+### ========================================
+### Email Verification
+### ========================================
+
+### Verify Email (Public)
+POST {{baseUrl}}/users/verify-email
+Content-Type: {{contentType}}
+
+{
+  "token": "ab0e242d20fbbced51e881a1eb22d167da50eeb76da3b7eb4a33cecf1853dc9e"
+}
+
+### Resend Verification Email (Public)
+POST {{baseUrl}}/users/resend-verification
+Content-Type: {{contentType}}
+
+{
+  "email": "john.doe@example.com"
+}
+
+### Send Verification Email (Authenticated)
+POST {{baseUrl}}/users/me/send-verification
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+### ========================================
+### Password Reset
+### ========================================
+
+### Forgot Password (Public)
+POST {{baseUrl}}/users/forgot-password
+Content-Type: {{contentType}}
+
+{
+  "email": "ebubekirinan94@gmail.com"
+}
+
+### Reset Password (Public)
+POST {{baseUrl}}/users/reset-password
+Content-Type: {{contentType}}
+
+{
+  "token": "0388b226d6376bff868549f83b71b5f2191cd98ac9cc2b952fbd07823dbc232e",
+  "newPassword": "Garage1998+"
+}

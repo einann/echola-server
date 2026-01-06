@@ -1,0 +1,55 @@
+### ==================================================
+### STORAGE ENDPOINTS (Development/Testing Only)
+### ==================================================
+### NOTE: These endpoints are for development/testing. Remove in production!
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### Generate Presigned Upload URL
+POST {{baseUrl}}/storage/presigned-url
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "bucket": "messages",
+  "fileKey": "test/my-file.jpg",
+  "contentType": "image/jpeg",
+  "expiresIn": 3600
+}
+
+### Direct File Upload (Multipart)
+# Note: This requires multipart/form-data and is better tested with tools like Postman
+# Example using curl:
+# curl -X POST http://localhost:3000/storage/upload/messages \
+#   -H "Authorization: Bearer YOUR_TOKEN" \
+#   -F "file=@/path/to/your/file.jpg" \
+#   -F "fileKey=test/uploaded-file.jpg"
+
+POST {{baseUrl}}/storage/upload/messages
+Authorization: Bearer {{token}}
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="test.jpg"
+Content-Type: image/jpeg
+
+< /path/to/your/test.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="fileKey"
+
+test/uploaded-file.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### Get Download URL
+GET {{baseUrl}}/storage/download-url/messages/test/my-file.jpg
+Authorization: Bearer {{token}}
+
+### Delete File
+DELETE {{baseUrl}}/storage/messages/test/my-file.jpg
+Authorization: Bearer {{token}}
+
+### Get Available Buckets
+GET {{baseUrl}}/storage/buckets
+Authorization: Bearer {{token}}

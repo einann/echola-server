@@ -1,3 +1,10 @@
 {
-  "prisma.pinToPrisma6": true
+  "prisma.pinToPrisma6": true,
+  "rest-client.environmentVariables": {
+    "$shared": {
+      "baseUrl": "http://localhost:3000",
+      "contentType": "application/json",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc2OTY5MTcsImV4cCI6MTgyOTkwNDkxN30.8sCeKPe7WDnQk7cl5426i-zrplfkbNDRM7Eghz0v2AQ"
+    }
+  }
 }

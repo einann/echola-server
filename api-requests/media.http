@@ -1,0 +1,62 @@
+### ==================================================
+### MEDIA ENDPOINTS
+### ==================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### Request Upload URL for Image
+POST {{baseUrl}}/media/upload-url
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "fileName": "photo.jpg",
+  "contentType": "image/jpeg",
+  "fileSize": 1048576,
+  "mediaType": "image"
+}
+
+### Request Upload URL for Video
+POST {{baseUrl}}/media/upload-url
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "fileName": "video.mp4",
+  "contentType": "video/mp4",
+  "fileSize": 10485760,
+  "mediaType": "video"
+}
+
+### Request Upload URL for Document
+POST {{baseUrl}}/media/upload-url
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "fileName": "document.pdf",
+  "contentType": "application/pdf",
+  "fileSize": 524288,
+  "mediaType": "document"
+}
+
+### Confirm Media Upload
+POST {{baseUrl}}/media/confirm
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "fileKey": "messages/user-id/file-name.jpg",
+  "bucket": "messages",
+  "fileName": "photo.jpg",
+  "contentType": "image/jpeg",
+  "fileSize": 1048576,
+  "mediaType": "image"
+}
+
+### Get Download URL for Media
+# Replace 'messages' with the bucket name and provide the full file path
+GET {{baseUrl}}/media/download-url/messages/user-id/file-name.jpg
+Authorization: Bearer {{token}}

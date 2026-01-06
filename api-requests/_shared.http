@@ -1,0 +1,26 @@
+### ==================================================
+### SHARED VARIABLES INFO
+### ==================================================
+###
+### TWO OPTIONS FOR MANAGING VARIABLES:
+###
+### OPTION 1 (RECOMMENDED): Use VS Code Settings
+### - Open: .vscode/settings.json
+### - Update the "token" value under "rest-client.environmentVariables.$shared"
+### - This will update the token for ALL .http files at once!
+###
+### OPTION 2: Update in each file
+### - Each .http file has its own @token variable at the top
+### - You'll need to update it in each file individually
+###
+### ==================================================
+### CURRENT VALUES (for reference)
+### ==================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+@token = YOUR_ACCESS_TOKEN_HERE
+
+### After login, copy your accessToken and update it in:
+### .vscode/settings.json (recommended)
+### OR in each individual .http file
