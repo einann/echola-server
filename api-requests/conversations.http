@@ -37,7 +37,7 @@ GET {{baseUrl}}/conversations?limit=20&cursor=6efc7eb5-f391-48bb-9188-185536c2a9
 Authorization: Bearer {{token}}
 
 ### Search Conversations by name or participant
-GET {{baseUrl}}/conversations?search=john
+GET {{baseUrl}}/conversations?search=test
 Authorization: Bearer {{token}}
 
 ### Filter Conversations by type (DIRECT or GROUP)
