@@ -4,7 +4,7 @@
 
 @baseUrl = http://localhost:3000
 @contentType = application/json
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc3MDY0ODksImV4cCI6MTc2Nzc0OTY4OX0.co5CtJXGZEoU5j3AR_j-EcVJO_nIyRK4u3731i-tpxc
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NjJkNTFmZi04ZTI5LTQ4YTUtOTliOS1hMjNlZTY4MTMzMzIiLCJkZXZpY2VJZCI6ImVpbmFuLW1hY2Jvb2siLCJpYXQiOjE3Njc3MDg4NTUsImV4cCI6MTc2Nzc1MjA1NX0.fy1e-nzJnOm6u8pmpGZl20peB4pGBLjUGzXIXXvPyuo
 ### Create Direct Conversation
 POST {{baseUrl}}/conversations
 Content-Type: {{contentType}}
@@ -32,6 +32,73 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/conversations
 Authorization: Bearer {{token}}
 
+### Get All My Conversations (with pagination)
+GET {{baseUrl}}/conversations?limit=20&cursor=6efc7eb5-f391-48bb-9188-185536c2a9d3
+Authorization: Bearer {{token}}
+
 ### Get Conversation by ID
-GET {{baseUrl}}/conversations/d3970c8f-f7d7-42e7-bb28-85de5713523a
+GET {{baseUrl}}/conversations/6efc7eb5-f391-48bb-9188-185536c2a9d3
+Authorization: Bearer {{token}}
+
+### ==================================================
+### GROUP MANAGEMENT ENDPOINTS
+### ==================================================
+
+@conversationId = 6efc7eb5-f391-48bb-9188-185536c2a9d3
+
+### Add Members to Group
+POST {{baseUrl}}/conversations/{{conversationId}}/members
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "userIds": ["6645958b-b08a-42d9-b20c-9b566bfe1a96"]
+}
+
+### Remove Member from Group
+DELETE {{baseUrl}}/conversations/{{conversationId}}/members/6645958b-b08a-42d9-b20c-9b566bfe1a96
+Authorization: Bearer {{token}}
+
+### Leave Group
+POST {{baseUrl}}/conversations/{{conversationId}}/leave
+Authorization: Bearer {{token}}
+
+### Update Member Role
+PUT {{baseUrl}}/conversations/{{conversationId}}/members/6645958b-b08a-42d9-b20c-9b566bfe1a96/role
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "role": "admin"
+}
+
+### Update Group Info
+PUT {{baseUrl}}/conversations/{{conversationId}}
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "name": "Updated Project Team",
+  "description": "New description for the team",
+  "avatarUrl": "https://example.com/new-avatar.jpg"
+}
+
+### Get Group Members
+GET {{baseUrl}}/conversations/{{conversationId}}/members
+Authorization: Bearer {{token}}
+
+### ==================================================
+### CONVERSATION MANAGEMENT ENDPOINTS
+### ==================================================
+
+### Mute Conversation
+POST {{baseUrl}}/conversations/{{conversationId}}/mute
+Authorization: Bearer {{token}}
+
+### Unmute Conversation
+POST {{baseUrl}}/conversations/{{conversationId}}/unmute
+Authorization: Bearer {{token}}
+
+### Delete Conversation (Direct conversations only)
+DELETE {{baseUrl}}/conversations/d7467004-35c9-48c6-a055-6986f507d770
 Authorization: Bearer {{token}}

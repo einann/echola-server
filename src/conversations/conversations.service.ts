@@ -310,4 +310,112 @@ export class ConversationsService {
 
     return existingConversation || null;
   }
+
+  // ============================================
+  // Mute/Unmute Conversation
+  // ============================================
+
+  async muteConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException(
+        'You are not a participant in this conversation',
+      );
+    }
+
+    // Update isMuted to true
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: { isMuted: true },
+    });
+
+    return {
+      conversationId,
+      isMuted: true,
+      message: 'Conversation muted successfully',
+    };
+  }
+
+  async unmuteConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException(
+        'You are not a participant in this conversation',
+      );
+    }
+
+    // Update isMuted to false
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: { isMuted: false },
+    });
+
+    return {
+      conversationId,
+      isMuted: false,
+      message: 'Conversation unmuted successfully',
+    };
+  }
+
+  // ============================================
+  // Delete/Hide Conversation
+  // ============================================
+
+  async deleteConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+      include: {
+        conversation: {
+          select: {
+            type: true,
+          },
+        },
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException(
+        'You are not a participant in this conversation',
+      );
+    }
+
+    // For GROUP conversations, redirect to leave group
+    if (participant.conversation.type === 'GROUP') {
+      throw new BadRequestException(
+        'Use leave group endpoint to exit group conversations',
+      );
+    }
+
+    // For DIRECT conversations, soft delete (set leftAt)
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: { leftAt: new Date() },
+    });
+
+    return {
+      conversationId,
+      message: 'Conversation deleted successfully',
+    };
+  }
 }

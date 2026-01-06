@@ -156,7 +156,7 @@ export class GroupManagementService {
     const newParticipants = await this.prisma.$transaction(async (tx) => {
       const results: ConversationParticipant[] = [];
 
-      // Re-add users who previously left (update leftAt to null)
+      // Re-add users who previously left (update leftAt to null and joinedAt to now)
       if (previousUserIds.length > 0) {
         await tx.conversationParticipant.updateMany({
           where: {
@@ -165,6 +165,7 @@ export class GroupManagementService {
           },
           data: {
             leftAt: null,
+            joinedAt: new Date(), // Update joinedAt to current timestamp
             role: 'member',
           },
         });
