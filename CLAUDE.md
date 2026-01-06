@@ -94,6 +94,7 @@ The application follows NestJS modular architecture with these key modules:
 - **RedisModule**: Global Redis client for pub/sub and caching
 - **PrismaModule**: Global database client
 - **LoggerModule**: Pino-based structured logging
+- **UserModule**: User services, update avatar, email verification, reset password, search user
 
 ### Global Modules
 
@@ -156,6 +157,8 @@ Key models:
 - **User**: Authentication, profile, presence
 - **Device**: Multi-device support per user
 - **RefreshToken**: JWT refresh tokens tied to devices
+- **EmailVerificationToken**: Tokens for email verification
+- **PasswordResetToken**: Tokens for password reset
 - **Conversation**: Direct or group conversations
 - **ConversationParticipant**: User membership in conversations
 - **Message**: Text/media/system messages with reply support
@@ -179,6 +182,7 @@ Required env vars (see `.env.example`):
 - MinIO: `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`
 - App: `PORT`, `NODE_ENV`, `FRONTEND_URL`
 - Monitoring: `SENTRY_DSN`
+- Email/SMPT: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
 - Limits: `MAX_IMAGE_SIZE`, `MAX_VIDEO_SIZE`, `MAX_DOCUMENT_SIZE`
 
 ### Logging
@@ -237,3 +241,5 @@ Access MinIO console at `http://localhost:9001` with credentials from `.env`.
 - Mock PrismaService and RedisService in tests
 
 # When implementing a new library or framework, or adding a feature that uses them, check the latest documentation using context7.
+
+# Whenever you update prisma schema or add new modules or update environment variables, update this file.
