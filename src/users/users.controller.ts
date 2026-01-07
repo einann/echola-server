@@ -57,19 +57,13 @@ export class UsersController {
 
   @Post('me/avatar/request-upload')
   @UseGuards(JwtAccessGuard)
-  async requestAvatarUpload(
-    @Request() req,
-    @Body() dto: RequestAvatarUploadDto,
-  ) {
+  async requestAvatarUpload(@Request() req, @Body() dto: RequestAvatarUploadDto) {
     return this.usersService.requestAvatarUpload(req.user.userId, dto);
   }
 
   @Post('me/avatar/confirm-upload')
   @UseGuards(JwtAccessGuard)
-  async confirmAvatarUpload(
-    @Request() req,
-    @Body() dto: ConfirmAvatarUploadDto,
-  ) {
+  async confirmAvatarUpload(@Request() req, @Body() dto: ConfirmAvatarUploadDto) {
     return this.usersService.confirmAvatarUpload(req.user.userId, dto);
   }
 

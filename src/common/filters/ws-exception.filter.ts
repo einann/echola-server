@@ -51,9 +51,7 @@ export class AllWsExceptionsFilter extends BaseWsExceptionFilter {
       const status = exception.getStatus();
       const response = exception.getResponse();
       const message =
-        typeof response === 'string'
-          ? response
-          : (response as any).message || 'An error occurred';
+        typeof response === 'string' ? response : (response as any).message || 'An error occurred';
 
       return {
         message,
@@ -65,13 +63,10 @@ export class AllWsExceptionsFilter extends BaseWsExceptionFilter {
     // Handle standard Error (sanitized - no stack trace)
     if (exception instanceof Error) {
       // In production, don't expose internal error messages
-      const isDevelopment =
-        this.configService?.get('NODE_ENV') === 'development';
+      const isDevelopment = this.configService?.get('NODE_ENV') === 'development';
 
       return {
-        message: isDevelopment
-          ? exception.message
-          : 'An internal error occurred',
+        message: isDevelopment ? exception.message : 'An internal error occurred',
         code: 'INTERNAL_ERROR',
         timestamp,
       };

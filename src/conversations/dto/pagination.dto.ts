@@ -1,12 +1,4 @@
-import {
-  IsOptional,
-  IsInt,
-  Min,
-  Max,
-  IsString,
-  IsEnum,
-  IsBoolean,
-} from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsEnum, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ConversationType } from 'generated/prisma/client';
 
@@ -34,4 +26,9 @@ export class PaginationQueryDto {
   @Type(() => Boolean)
   @IsBoolean()
   muted?: boolean; // Filter by muted status
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  archived?: boolean; // Filter by archived status
 }

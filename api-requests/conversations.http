@@ -115,6 +115,26 @@ Authorization: Bearer {{token}}
 POST {{baseUrl}}/conversations/{{conversationId}}/unmute
 Authorization: Bearer {{token}}
 
+### Archive Conversation
+POST {{baseUrl}}/conversations/{{conversationId}}/archive
+Authorization: Bearer {{token}}
+
+### Unarchive Conversation
+POST {{baseUrl}}/conversations/{{conversationId}}/unarchive
+Authorization: Bearer {{token}}
+
+### Filter Archived Conversations
+GET {{baseUrl}}/conversations?archived=true
+Authorization: Bearer {{token}}
+
+### Pin Conversation
+POST {{baseUrl}}/conversations/{{conversationId}}/pin
+Authorization: Bearer {{token}}
+
+### Unpin Conversation
+POST {{baseUrl}}/conversations/{{conversationId}}/unpin
+Authorization: Bearer {{token}}
+
 ### Delete Conversation (Direct conversations only)
 DELETE {{baseUrl}}/conversations/d7467004-35c9-48c6-a055-6986f507d770
 Authorization: Bearer {{token}}

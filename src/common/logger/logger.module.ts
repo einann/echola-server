@@ -25,8 +25,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
                     translateTime: 'HH:MM:ss Z',
                     ignore: 'pid,hostname',
                     singleLine: false,
-                    messageFormat:
-                      '{req.method} {req.url} {res.statusCode} - {responseTime}ms',
+                    messageFormat: '{req.method} {req.url} {res.statusCode} - {responseTime}ms',
                   },
                 }
               : undefined,

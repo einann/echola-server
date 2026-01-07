@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,15 +20,8 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const {
-      email,
-      password,
-      displayName,
-      username,
-      deviceId,
-      deviceName,
-      deviceType,
-    } = registerDto;
+    const { email, password, displayName, username, deviceId, deviceName, deviceType } =
+      registerDto;
 
     // Check if user already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -87,8 +76,7 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const { email, password, deviceId, deviceName, deviceType, fcmToken } =
-      loginDto;
+    const { email, password, deviceId, deviceName, deviceType, fcmToken } = loginDto;
 
     // Find user
     const user = await this.prisma.user.findUnique({
@@ -239,20 +227,14 @@ export class AuthService {
     await this.prisma.refreshToken.create({
       data: {
         userId,
-        deviceId:
-          (await this.prisma.device.findUnique({ where: { deviceId } }))?.id ??
-          '',
+        deviceId: (await this.prisma.device.findUnique({ where: { deviceId } }))?.id ?? '',
         token: refreshToken,
         expiresAt,
       },
     });
 
     // Store session in Redis for quick lookup (15 min TTL matching access token)
-    await this.redisService.set(
-      `session:${userId}:${deviceId}`,
-      'active',
-      15 * 60,
-    );
+    await this.redisService.set(`session:${userId}:${deviceId}`, 'active', 15 * 60);
 
     return {
       accessToken,

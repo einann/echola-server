@@ -7,10 +7,7 @@ import { RedisService } from '../../redis/redis.service';
 import { Request } from 'express';
 
 @Injectable()
-export class JwtAccessStrategy extends PassportStrategy(
-  Strategy,
-  'jwt-access',
-) {
+export class JwtAccessStrategy extends PassportStrategy(Strategy, 'jwt-access') {
   constructor(
     configService: ConfigService,
     private prisma: PrismaService,
@@ -28,9 +25,7 @@ export class JwtAccessStrategy extends PassportStrategy(
     const { sub: userId, deviceId } = payload;
 
     // Check if session exists in Redis (quick check)
-    const sessionExists = await this.redisService.exists(
-      `session:${userId}:${deviceId}`,
-    );
+    const sessionExists = await this.redisService.exists(`session:${userId}:${deviceId}`);
 
     if (!sessionExists) {
       throw new UnauthorizedException('Session expired or invalid');

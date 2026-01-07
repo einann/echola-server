@@ -4,10 +4,7 @@ import { ReactionsService } from './reactions.service';
 import { RedisService } from '../redis/redis.service';
 import { SocketService } from '../socket/socket.service';
 import { AuthenticatedSocket } from '../gateway/types/socket.types';
-import {
-  AddReactionEvent,
-  RemoveReactionEvent,
-} from './dto/message-reaction-events.dto';
+import { AddReactionEvent, RemoveReactionEvent } from './dto/message-reaction-events.dto';
 
 @Injectable()
 export class ReactionsHandler {
@@ -17,17 +14,10 @@ export class ReactionsHandler {
     private socketService: SocketService,
   ) {}
 
-  async addReaction(
-    client: AuthenticatedSocket,
-    data: AddReactionEvent,
-  ): Promise<void> {
+  async addReaction(client: AuthenticatedSocket, data: AddReactionEvent): Promise<void> {
     const userId = client.data.userId;
 
-    const reaction = await this.reactionsService.addReaction(
-      userId,
-      data.messageId,
-      data.emoji,
-    );
+    const reaction = await this.reactionsService.addReaction(userId, data.messageId, data.emoji);
 
     if (!reaction) {
       throw new Error('Reaction creation error.');
@@ -53,27 +43,17 @@ export class ReactionsHandler {
     );
 
     // Publish to Redis for other server instances
-    await this.redisService.publish(
-      `conversation:${reaction.message.conversationId}`,
-      {
-        type: 'reaction_added',
-        messageId: data.messageId,
-        reaction,
-      },
-    );
+    await this.redisService.publish(`conversation:${reaction.message.conversationId}`, {
+      type: 'reaction_added',
+      messageId: data.messageId,
+      reaction,
+    });
   }
 
-  async removeReaction(
-    client: AuthenticatedSocket,
-    data: RemoveReactionEvent,
-  ): Promise<void> {
+  async removeReaction(client: AuthenticatedSocket, data: RemoveReactionEvent): Promise<void> {
     const userId = client.data.userId;
 
-    const result = await this.reactionsService.removeReaction(
-      userId,
-      data.messageId,
-      data.emoji,
-    );
+    const result = await this.reactionsService.removeReaction(userId, data.messageId, data.emoji);
 
     // Acknowledge to sender
     client.emit('message:reaction:removed', {
@@ -82,18 +62,14 @@ export class ReactionsHandler {
     });
 
     // Broadcast to all participants in the conversation
-    this.socketService.emitToConversation(
-      result.conversationId,
-      'message:reaction:updated',
-      {
-        messageId: data.messageId,
-        reaction: {
-          emoji: data.emoji,
-          userId,
-        },
-        action: 'remove',
+    this.socketService.emitToConversation(result.conversationId, 'message:reaction:updated', {
+      messageId: data.messageId,
+      reaction: {
+        emoji: data.emoji,
+        userId,
       },
-    );
+      action: 'remove',
+    });
 
     // Publish to Redis for other server instances
     await this.redisService.publish(`conversation:${result.conversationId}`, {
@@ -104,13 +80,8 @@ export class ReactionsHandler {
     });
   }
 
-  async getReactions(
-    client: Socket,
-    data: { messageId: string },
-  ): Promise<void> {
-    const reactions = await this.reactionsService.getMessageReactions(
-      data.messageId,
-    );
+  async getReactions(client: Socket, data: { messageId: string }): Promise<void> {
+    const reactions = await this.reactionsService.getMessageReactions(data.messageId);
 
     client.emit('message:reactions:list', reactions);
   }

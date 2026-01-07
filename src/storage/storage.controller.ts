@@ -55,12 +55,7 @@ export class StorageController {
   ) {
     const key = fileKey || `test/${Date.now()}-${file.originalname}`;
 
-    const result = await this.storageService.uploadBuffer(
-      bucket,
-      key,
-      file.buffer,
-      file.mimetype,
-    );
+    const result = await this.storageService.uploadBuffer(bucket, key, file.buffer, file.mimetype);
 
     return {
       success: true,
@@ -78,10 +73,7 @@ export class StorageController {
     @Param() params: { bucket: string; path: string[] },
   ) {
     const fileKey = params.path.join('/');
-    const url = await this.storageService.generatePresignedDownloadUrl(
-      bucket,
-      fileKey,
-    );
+    const url = await this.storageService.generatePresignedDownloadUrl(bucket, fileKey);
 
     return { url };
   }

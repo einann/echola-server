@@ -7,10 +7,7 @@ import { TypingEvent } from './dto/typing-events.dto';
 export class PresenceHandler {
   constructor(private redisService: RedisService) {}
 
-  async startTyping(
-    client: AuthenticatedSocket,
-    data: TypingEvent,
-  ): Promise<void> {
+  async startTyping(client: AuthenticatedSocket, data: TypingEvent): Promise<void> {
     const userId = client.data.userId;
 
     // Set typing indicator in Redis (5-second TTL)
@@ -27,11 +24,9 @@ export class PresenceHandler {
     const userId = client.data.userId;
 
     // Broadcast to conversation participants
-    client
-      .to(`conversation:${data.conversationId}`)
-      .emit('user_stopped_typing', {
-        conversationId: data.conversationId,
-        userId,
-      });
+    client.to(`conversation:${data.conversationId}`).emit('user_stopped_typing', {
+      conversationId: data.conversationId,
+      userId,
+    });
   }
 }

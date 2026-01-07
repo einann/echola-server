@@ -1,11 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import {
-  RedisConversationEvent,
-  QueuedMessage,
-  UploadMetadata,
-} from './types/redis-data.types';
+import { RedisConversationEvent, QueuedMessage, UploadMetadata } from './types/redis-data.types';
 import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
@@ -27,12 +23,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.client.on('error', (err) => console.error('Redis Client Error:', err));
-    this.pubClient.on('error', (err) =>
-      console.error('Redis Pub Client Error:', err),
-    );
-    this.subClient.on('error', (err) =>
-      console.error('Redis Sub Client Error:', err),
-    );
+    this.pubClient.on('error', (err) => console.error('Redis Pub Client Error:', err));
+    this.subClient.on('error', (err) => console.error('Redis Sub Client Error:', err));
   }
 
   // ============================================
@@ -109,10 +101,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.expire(key, 7 * 24 * 60 * 60);
   }
 
-  async getInboxMessages(
-    userId: string,
-    limit = 100,
-  ): Promise<QueuedMessage[]> {
+  async getInboxMessages(userId: string, limit = 100): Promise<QueuedMessage[]> {
     const key = `inbox:${userId}`;
     const messages = await this.client.zrange(key, 0, limit - 1);
     return messages.map((msg) => JSON.parse(msg) as QueuedMessage);
@@ -149,9 +138,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.setex(key, ttl, JSON.stringify(messages));
   }
 
-  async getCachedMessages(
-    conversationId: string,
-  ): Promise<QueuedMessage[] | null> {
+  async getCachedMessages(conversationId: string): Promise<QueuedMessage[] | null> {
     const key = `conversation:${conversationId}:messages`;
     const cached = await this.client.get(key);
     return cached ? (JSON.parse(cached) as QueuedMessage[]) : null;
@@ -191,10 +178,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.setex(key, ttl, JSON.stringify(metadata));
   }
 
-  async getUploadMetadata(
-    userId: string,
-    fileKey: string,
-  ): Promise<UploadMetadata | null> {
+  async getUploadMetadata(userId: string, fileKey: string): Promise<UploadMetadata | null> {
     const key = `upload:${userId}:${fileKey}`;
     const data = await this.client.get(key);
     return data ? (JSON.parse(data) as UploadMetadata) : null;
@@ -217,10 +201,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.subClient;
   }
 
-  async publish(
-    channel: string,
-    message: RedisConversationEvent,
-  ): Promise<void> {
+  async publish(channel: string, message: RedisConversationEvent): Promise<void> {
     await this.pubClient.publish(channel, JSON.stringify(message));
   }
 

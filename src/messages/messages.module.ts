@@ -10,12 +10,7 @@ import { MediaModule } from 'src/media/media.module';
 @Module({
   imports: [PrismaModule, MediaModule],
   controllers: [MessagesController],
-  providers: [
-    MessagesService,
-    MessagesHandler,
-    ReactionsService,
-    ReactionsHandler,
-  ],
+  providers: [MessagesService, MessagesHandler, ReactionsService, ReactionsHandler],
   exports: [MessagesService, MessagesHandler, ReactionsHandler],
 })
 export class MessagesModule {}

@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  ConversationParticipant,
-  ConversationType,
-} from 'generated/prisma/client';
+import { ConversationParticipant, ConversationType } from 'generated/prisma/client';
 import { EnvironmentVariables } from '../config/env.validation';
 
 @Injectable()
@@ -24,10 +21,7 @@ export class GroupManagementService {
   // Permission Checks
   // ============================================
 
-  private async verifyGroupAdmin(
-    userId: string,
-    conversationId: string,
-  ): Promise<void> {
+  private async verifyGroupAdmin(userId: string, conversationId: string): Promise<void> {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
@@ -55,10 +49,7 @@ export class GroupManagementService {
     }
   }
 
-  private async verifyGroupMember(
-    userId: string,
-    conversationId: string,
-  ): Promise<void> {
+  private async verifyGroupMember(userId: string, conversationId: string): Promise<void> {
     const participant = await this.prisma.conversationParticipant.findFirst({
       where: {
         conversationId,
@@ -72,10 +63,7 @@ export class GroupManagementService {
     }
   }
 
-  private async isGroupCreator(
-    userId: string,
-    conversationId: string,
-  ): Promise<boolean> {
+  private async isGroupCreator(userId: string, conversationId: string): Promise<boolean> {
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       select: { createdBy: true },
@@ -93,14 +81,12 @@ export class GroupManagementService {
     await this.verifyGroupAdmin(adminId, conversationId);
 
     // Check current group size
-    const currentMembersCount = await this.prisma.conversationParticipant.count(
-      {
-        where: {
-          conversationId,
-          leftAt: null,
-        },
+    const currentMembersCount = await this.prisma.conversationParticipant.count({
+      where: {
+        conversationId,
+        leftAt: null,
       },
-    );
+    });
 
     const maxGroupSize = this.configService.get('MAX_GROUP_SIZE', {
       infer: true,
@@ -123,31 +109,27 @@ export class GroupManagementService {
     }
 
     // Check which users are currently active participants
-    const activeParticipants =
-      await this.prisma.conversationParticipant.findMany({
-        where: {
-          conversationId,
-          userId: { in: userIds },
-          leftAt: null,
-        },
-      });
+    const activeParticipants = await this.prisma.conversationParticipant.findMany({
+      where: {
+        conversationId,
+        userId: { in: userIds },
+        leftAt: null,
+      },
+    });
 
     if (activeParticipants.length > 0) {
       const activeUserIds = activeParticipants.map((p) => p.userId);
-      throw new ConflictException(
-        `Users already in group: ${activeUserIds.join(', ')}`,
-      );
+      throw new ConflictException(`Users already in group: ${activeUserIds.join(', ')}`);
     }
 
     // Find users who previously left (to re-add them)
-    const previousParticipants =
-      await this.prisma.conversationParticipant.findMany({
-        where: {
-          conversationId,
-          userId: { in: userIds },
-          leftAt: { not: null },
-        },
-      });
+    const previousParticipants = await this.prisma.conversationParticipant.findMany({
+      where: {
+        conversationId,
+        userId: { in: userIds },
+        leftAt: { not: null },
+      },
+    });
 
     const previousUserIds = previousParticipants.map((p) => p.userId);
     const newUserIds = userIds.filter((id) => !previousUserIds.includes(id));
@@ -246,19 +228,13 @@ export class GroupManagementService {
   // Remove Member from Group
   // ============================================
 
-  async removeMember(
-    adminId: string,
-    conversationId: string,
-    userIdToRemove: string,
-  ) {
+  async removeMember(adminId: string, conversationId: string, userIdToRemove: string) {
     // Verify admin permissions
     await this.verifyGroupAdmin(adminId, conversationId);
 
     // Can't remove yourself using this method (use leaveGroup instead)
     if (adminId === userIdToRemove) {
-      throw new BadRequestException(
-        'Use leave group to remove yourself from the group',
-      );
+      throw new BadRequestException('Use leave group to remove yourself from the group');
     }
 
     // Can't remove the group creator
@@ -325,9 +301,7 @@ export class GroupManagementService {
       });
 
       if (otherAdmins.length === 0) {
-        throw new BadRequestException(
-          'Group creator must promote another admin before leaving',
-        );
+        throw new BadRequestException('Group creator must promote another admin before leaving');
       }
     }
 
@@ -407,22 +381,20 @@ export class GroupManagementService {
     }
 
     // Update role
-    const updatedParticipant = await this.prisma.conversationParticipant.update(
-      {
-        where: { id: participant.id },
-        data: { role: newRole },
-        include: {
-          user: {
-            select: {
-              id: true,
-              displayName: true,
-              username: true,
-              avatarUrl: true,
-            },
+    const updatedParticipant = await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: { role: newRole },
+      include: {
+        user: {
+          select: {
+            id: true,
+            displayName: true,
+            username: true,
+            avatarUrl: true,
           },
         },
       },
-    );
+    });
 
     return {
       conversationId,

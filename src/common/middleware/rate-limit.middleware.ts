@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NestMiddleware,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { RedisService } from '../../redis/redis.service';
 
@@ -31,10 +26,7 @@ export class RateLimitMiddleware implements NestMiddleware {
 
       // Set rate limit headers
       res.setHeader('X-RateLimit-Limit', config.maxRequests);
-      res.setHeader(
-        'X-RateLimit-Remaining',
-        Math.max(0, config.maxRequests - current),
-      );
+      res.setHeader('X-RateLimit-Remaining', Math.max(0, config.maxRequests - current));
       res.setHeader('X-RateLimit-Reset', Date.now() + config.windowMs);
 
       if (current > config.maxRequests) {
@@ -79,10 +71,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     }
 
     // Moderate limits for file uploads
-    if (
-      path.includes('/storage/upload') ||
-      path.includes('/storage/presigned-url')
-    ) {
+    if (path.includes('/storage/upload') || path.includes('/storage/presigned-url')) {
       return {
         windowMs: 60 * 60 * 1000, // 1 hour
         maxRequests: 50,
@@ -114,9 +103,7 @@ export class RateLimitMiddleware implements NestMiddleware {
     // /conversations/123/messages -> /conversations/:id/messages
     return path
       .split('/')
-      .map((segment) =>
-        segment.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/i) ? ':id' : segment,
-      )
+      .map((segment) => (segment.match(/^[0-9a-f]{8}-[0-9a-f]{4}-/i) ? ':id' : segment))
       .join('/');
   }
 

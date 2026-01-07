@@ -4,9 +4,7 @@ import DOMPurify from 'isomorphic-dompurify';
  * Sanitizes a string by removing all HTML tags and scripts
  * to prevent XSS attacks
  */
-export function sanitizeString(
-  value: string | undefined | null,
-): string | undefined | null {
+export function sanitizeString(value: string | undefined | null): string | undefined | null {
   if (!value || typeof value !== 'string') {
     return value;
   }

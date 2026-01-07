@@ -20,9 +20,7 @@ export class MediaService {
   /**
    * Yükleme için presigned URL üretir
    */
-  async requestUploadUrl(
-    dto: MediaUploadRequestDto,
-  ): Promise<PresignedUrlResult> {
+  async requestUploadUrl(dto: MediaUploadRequestDto): Promise<PresignedUrlResult> {
     const fileKey = this.generateTempKey(dto.fileName);
 
     return this.storageService.generatePresignedUploadUrl(
@@ -37,20 +35,13 @@ export class MediaService {
    */
   async confirmUpload(dto: MediaUploadConfirmDto): Promise<ProcessedMedia> {
     // 1. Temp'ten dosyayı al
-    const buffer = await this.storageService.getBuffer(
-      StorageBucket.TEMP,
-      dto.fileKey,
-    );
+    const buffer = await this.storageService.getBuffer(StorageBucket.TEMP, dto.fileKey);
 
     // 2. Media tipine göre işle
     const processed = await this.processMedia(buffer, dto.mediaType);
 
     // 3. İşlenmiş dosyaları yükle
-    const result = await this.uploadProcessedMedia(
-      processed,
-      dto.conversationId,
-      dto.mediaType,
-    );
+    const result = await this.uploadProcessedMedia(processed, dto.conversationId, dto.mediaType);
 
     // 4. Temp dosyayı sil
     await this.storageService.delete(StorageBucket.TEMP, dto.fileKey);
@@ -61,10 +52,7 @@ export class MediaService {
   /**
    * Download URL üretir (client'ın dosyayı indirmesi için)
    */
-  async getDownloadUrl(
-    bucket: StorageBucket,
-    fileKey: string,
-  ): Promise<string> {
+  async getDownloadUrl(bucket: StorageBucket, fileKey: string): Promise<string> {
     return this.storageService.generatePresignedDownloadUrl(bucket, fileKey);
   }
 
@@ -161,9 +149,7 @@ export class MediaService {
   }
 
   private getBucketForMediaType(mediaType: MediaType): StorageBucket {
-    return mediaType === MediaType.DOCUMENT
-      ? StorageBucket.DOCUMENTS
-      : StorageBucket.MEDIA;
+    return mediaType === MediaType.DOCUMENT ? StorageBucket.DOCUMENTS : StorageBucket.MEDIA;
   }
 
   private getExtension(mimeType: string): string {

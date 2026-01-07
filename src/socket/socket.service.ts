@@ -31,8 +31,6 @@ export class SocketService {
   }
 
   async getConversationSockets(conversationId: string) {
-    return await this.server
-      .to(`conversation:${conversationId}`)
-      .fetchSockets();
+    return await this.server.to(`conversation:${conversationId}`).fetchSockets();
   }
 }

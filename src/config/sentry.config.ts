@@ -3,9 +3,7 @@ import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { ConfigService } from '@nestjs/config';
 import { EnvironmentVariables } from './env.validation';
 
-export function initializeSentry(
-  configService: ConfigService<EnvironmentVariables>,
-) {
+export function initializeSentry(configService: ConfigService<EnvironmentVariables>) {
   const dsn = configService.get('SENTRY_DSN', { infer: true });
   const environment = configService.get<string>('NODE_ENV', { infer: true });
 

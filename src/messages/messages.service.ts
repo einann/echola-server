@@ -10,11 +10,7 @@ import {
 import { Logger } from 'nestjs-pino';
 
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  DeliveryStatus,
-  MessageType,
-  MediaType,
-} from 'generated/prisma/client';
+import { DeliveryStatus, MessageType, MediaType } from 'generated/prisma/client';
 import { CreateMediaMessageDto } from './dto/create-media-message.dto';
 import { ConfigService } from '@nestjs/config';
 import { EnvironmentVariables } from 'src/config/env.validation';
@@ -130,10 +126,7 @@ export class MessagesService {
     }
 
     // Get recipients
-    const recipients = await this.getRecipients(
-      dto.conversationId,
-      dto.senderId,
-    );
+    const recipients = await this.getRecipients(dto.conversationId, dto.senderId);
 
     // Determine media type from mimeType
     const mediaType = this.determineMediaType(dto.media.metadata.mimeType);
@@ -192,12 +185,7 @@ export class MessagesService {
   // GET MESSAGES
   // ============================================
 
-  async getMessages(
-    userId: string,
-    conversationId: string,
-    limit = 50,
-    beforeMessageId?: string,
-  ) {
+  async getMessages(userId: string, conversationId: string, limit = 50, beforeMessageId?: string) {
     await this.verifyParticipant(conversationId, userId);
 
     const cursor = beforeMessageId ? { id: beforeMessageId } : undefined;
@@ -349,10 +337,7 @@ export class MessagesService {
     }
 
     // Only TEXT messages can be edited, or caption of MEDIA messages
-    if (
-      message.type !== MessageType.TEXT &&
-      message.type !== MessageType.MEDIA
-    ) {
+    if (message.type !== MessageType.TEXT && message.type !== MessageType.MEDIA) {
       throw new BadRequestException('This message type cannot be edited');
     }
 
@@ -371,11 +356,7 @@ export class MessagesService {
   // DELETE MESSAGE
   // ============================================
 
-  async deleteMessage(
-    messageId: string,
-    userId: string,
-    deleteForEveryone = false,
-  ) {
+  async deleteMessage(messageId: string, userId: string, deleteForEveryone = false) {
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
@@ -412,9 +393,7 @@ export class MessagesService {
     if (deleteForEveryone) {
       if (message.conversation.type === 'GROUP') {
         if (!isAdmin && !isGroupCreator) {
-          throw new ForbiddenException(
-            'Only admins can delete messages for everyone',
-          );
+          throw new ForbiddenException('Only admins can delete messages for everyone');
         }
       } else {
         if (!isSender) {
@@ -538,26 +517,19 @@ export class MessagesService {
     });
 
     if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
+      throw new ForbiddenException('You are not a participant in this conversation');
     }
 
     return participant;
   }
 
-  private async verifyReplyToMessage(
-    replyToId: string,
-    conversationId: string,
-  ) {
+  private async verifyReplyToMessage(replyToId: string, conversationId: string) {
     const replyToMessage = await this.prisma.message.findUnique({
       where: { id: replyToId },
     });
 
     if (!replyToMessage || replyToMessage.conversationId !== conversationId) {
-      throw new BadRequestException(
-        'Reply-to message not found in this conversation',
-      );
+      throw new BadRequestException('Reply-to message not found in this conversation');
     }
 
     return replyToMessage;

@@ -22,16 +22,12 @@ export class ConversationsService {
 
     // Validation: DIRECT must have exactly 1 other participant
     if (type === ConversationType.DIRECT && participantIds.length !== 1) {
-      throw new BadRequestException(
-        'Direct conversation must have exactly one other participant',
-      );
+      throw new BadRequestException('Direct conversation must have exactly one other participant');
     }
 
     // Validation: GROUP must have at least 2 participants (excluding creator)
     if (type === ConversationType.GROUP && participantIds.length < 1) {
-      throw new BadRequestException(
-        'Group conversation must have at least one other participant',
-      );
+      throw new BadRequestException('Group conversation must have at least one other participant');
     }
 
     // Validation: GROUP size limit (including creator)
@@ -50,10 +46,7 @@ export class ConversationsService {
 
     // Check if DIRECT conversation already exists
     if (type === ConversationType.DIRECT) {
-      const existingConversation = await this.findDirectConversation(
-        userId,
-        participantIds[0],
-      );
+      const existingConversation = await this.findDirectConversation(userId, participantIds[0]);
       if (existingConversation) {
         return existingConversation;
       }
@@ -121,6 +114,7 @@ export class ConversationsService {
       search?: string;
       type?: ConversationType;
       muted?: boolean;
+      archived?: boolean;
     },
   ) {
     const limit = options?.limit || 20;
@@ -128,6 +122,7 @@ export class ConversationsService {
     const search = options?.search;
     const type = options?.type;
     const muted = options?.muted;
+    const archived = options?.archived;
 
     // Build where clause with cursor for pagination
     const whereClause = {
@@ -135,11 +130,17 @@ export class ConversationsService {
       leftAt: null, // Only active conversations
       conversation: {},
       isMuted: false,
+      isArchived: false,
     };
 
     // Apply muted filter
     if (muted !== undefined) {
       whereClause.isMuted = muted;
+    }
+
+    // Apply archived filter
+    if (archived !== undefined) {
+      whereClause.isArchived = archived;
     }
 
     // Build conversation filter
@@ -211,7 +212,10 @@ export class ConversationsService {
     const participants = await this.prisma.conversationParticipant.findMany({
       where: whereClause,
       take: limit + 1, // Fetch one extra to check if there's more
-      include: {
+      select: {
+        isPinned: true,
+        pinnedAt: true,
+        lastReadAt: true,
         conversation: {
           include: {
             participants: {
@@ -253,9 +257,24 @@ export class ConversationsService {
       },
     });
 
+    // Sort results: pinned conversations first (by pinnedAt DESC), then unpinned (by updatedAt DESC)
+    const sortedParticipants = participants.sort((a, b) => {
+      // If both are pinned or both are not pinned
+      if (a.isPinned === b.isPinned) {
+        if (a.isPinned && a.pinnedAt && b.pinnedAt) {
+          // Both pinned: sort by pinnedAt DESC
+          return b.pinnedAt.getTime() - a.pinnedAt.getTime();
+        }
+        // Both unpinned: sort by conversation updatedAt DESC
+        return b.conversation.updatedAt.getTime() - a.conversation.updatedAt.getTime();
+      }
+      // One is pinned, one is not: pinned comes first
+      return a.isPinned ? -1 : 1;
+    });
+
     // Check if there are more results
-    const hasMore = participants.length > limit;
-    const items = hasMore ? participants.slice(0, limit) : participants;
+    const hasMore = sortedParticipants.length > limit;
+    const items = hasMore ? sortedParticipants.slice(0, limit) : sortedParticipants;
 
     // Calculate unread counts for all conversations
     const conversationsWithUnread = await Promise.all(
@@ -273,6 +292,8 @@ export class ConversationsService {
           ...p.conversation,
           lastMessage: p.conversation.messages[0] || null,
           unreadCount,
+          isPinned: p.isPinned,
+          pinnedAt: p.pinnedAt,
         };
       }),
     );
@@ -297,9 +318,7 @@ export class ConversationsService {
     });
 
     if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
+      throw new ForbiddenException('You are not a participant in this conversation');
     }
 
     const conversation = await this.prisma.conversation.findUnique({
@@ -370,9 +389,7 @@ export class ConversationsService {
       if (conv.participants.length !== 2) return false;
 
       const participantIds = conv.participants.map((p) => p.userId);
-      return (
-        participantIds.includes(user1Id) && participantIds.includes(user2Id)
-      );
+      return participantIds.includes(user1Id) && participantIds.includes(user2Id);
     });
 
     return existingConversation || null;
@@ -393,9 +410,7 @@ export class ConversationsService {
     });
 
     if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
+      throw new ForbiddenException('You are not a participant in this conversation');
     }
 
     // Update isMuted to true
@@ -422,9 +437,7 @@ export class ConversationsService {
     });
 
     if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
+      throw new ForbiddenException('You are not a participant in this conversation');
     }
 
     // Update isMuted to false
@@ -437,6 +450,144 @@ export class ConversationsService {
       conversationId,
       isMuted: false,
       message: 'Conversation unmuted successfully',
+    };
+  }
+
+  // ============================================
+  // Archive/Unarchive Conversation
+  // ============================================
+
+  async archiveConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('You are not a participant in this conversation');
+    }
+
+    // Update isArchived to true
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: { isArchived: true },
+    });
+
+    return {
+      conversationId,
+      isArchived: true,
+      message: 'Conversation archived successfully',
+    };
+  }
+
+  async unarchiveConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('You are not a participant in this conversation');
+    }
+
+    // Update isArchived to false
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: { isArchived: false },
+    });
+
+    return {
+      conversationId,
+      isArchived: false,
+      message: 'Conversation unarchived successfully',
+    };
+  }
+
+  // ============================================
+  // Pin/Unpin Conversation
+  // ============================================
+
+  async pinConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('You are not a participant in this conversation');
+    }
+
+    // Check max pinned conversations limit (e.g., 5)
+    const pinnedCount = await this.prisma.conversationParticipant.count({
+      where: {
+        userId,
+        isPinned: true,
+        leftAt: null,
+      },
+    });
+
+    const MAX_PINNED = 5;
+    if (pinnedCount >= MAX_PINNED && !participant.isPinned) {
+      throw new BadRequestException(
+        `You can only pin up to ${MAX_PINNED} conversations. Unpin another conversation first.`,
+      );
+    }
+
+    // Update isPinned to true and set pinnedAt timestamp
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: {
+        isPinned: true,
+        pinnedAt: new Date(),
+      },
+    });
+
+    return {
+      conversationId,
+      isPinned: true,
+      message: 'Conversation pinned successfully',
+    };
+  }
+
+  async unpinConversation(userId: string, conversationId: string) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('You are not a participant in this conversation');
+    }
+
+    // Update isPinned to false and clear pinnedAt
+    await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: {
+        isPinned: false,
+        pinnedAt: null,
+      },
+    });
+
+    return {
+      conversationId,
+      isPinned: false,
+      message: 'Conversation unpinned successfully',
     };
   }
 
@@ -462,16 +613,12 @@ export class ConversationsService {
     });
 
     if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
+      throw new ForbiddenException('You are not a participant in this conversation');
     }
 
     // For GROUP conversations, redirect to leave group
     if (participant.conversation.type === 'GROUP') {
-      throw new BadRequestException(
-        'Use leave group endpoint to exit group conversations',
-      );
+      throw new BadRequestException('Use leave group endpoint to exit group conversations');
     }
 
     // For DIRECT conversations, soft delete (set leftAt)

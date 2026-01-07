@@ -43,10 +43,7 @@ export class MessagesController {
 
   @Put(':messageId/delivered')
   async markAsDelivered(@Request() req, @Param('messageId') messageId: string) {
-    return this.messagesService.markMessageAsDelivered(
-      req.user.userId,
-      messageId,
-    );
+    return this.messagesService.markMessageAsDelivered(req.user.userId, messageId);
   }
 
   @Put(':messageId/read')
@@ -55,14 +52,8 @@ export class MessagesController {
   }
 
   @Put('conversation/:conversationId/read')
-  async markConversationAsRead(
-    @Request() req,
-    @Param('conversationId') conversationId: string,
-  ) {
-    return this.messagesService.markConversationAsRead(
-      req.user.userId,
-      conversationId,
-    );
+  async markConversationAsRead(@Request() req, @Param('conversationId') conversationId: string) {
+    return this.messagesService.markConversationAsRead(req.user.userId, conversationId);
   }
 
   @Put(':messageId')
@@ -71,11 +62,7 @@ export class MessagesController {
     @Param('messageId') messageId: string,
     @Body('content') content: string,
   ) {
-    return this.messagesService.editMessage(
-      req.user.userId,
-      messageId,
-      content,
-    );
+    return this.messagesService.editMessage(req.user.userId, messageId, content);
   }
 
   @Delete(':messageId')
@@ -84,18 +71,11 @@ export class MessagesController {
     @Param('messageId') messageId: string,
     @Body() dto: DeleteMessageDto,
   ) {
-    return this.messagesService.deleteMessage(
-      messageId,
-      req.user.id,
-      dto.deleteForEveryone,
-    );
+    return this.messagesService.deleteMessage(messageId, req.user.id, dto.deleteForEveryone);
   }
 
   @Get('conversation/:conversationId/unread-count')
-  async getUnreadCount(
-    @Request() req,
-    @Param('conversationId') conversationId: string,
-  ) {
+  async getUnreadCount(@Request() req, @Param('conversationId') conversationId: string) {
     return this.messagesService.getUnreadCount(req.user.userId, conversationId);
   }
 }

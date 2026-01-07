@@ -35,9 +35,7 @@ export class ReactionsService {
     });
 
     if (!participant) {
-      throw new ForbiddenException(
-        'You are not a participant in this conversation',
-      );
+      throw new ForbiddenException('You are not a participant in this conversation');
     }
 
     // Validate emoji (basic validation - can be enhanced)

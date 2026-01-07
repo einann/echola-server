@@ -42,10 +42,7 @@ export class VideoProcessor {
     }
   }
 
-  private extractMetadata(
-    inputPath: string,
-    mimeType: string,
-  ): Promise<MediaMetadata> {
+  private extractMetadata(inputPath: string, mimeType: string): Promise<MediaMetadata> {
     return new Promise((resolve, reject) => {
       const ffprobe = spawn('ffprobe', [
         '-v',
@@ -79,10 +76,7 @@ export class VideoProcessor {
     });
   }
 
-  private generateThumbnail(
-    inputPath: string,
-    outputPath: string,
-  ): Promise<void> {
+  private generateThumbnail(inputPath: string, outputPath: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const ffmpeg = spawn('ffmpeg', [
         '-i',

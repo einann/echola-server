@@ -52,10 +52,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json(errorResponse);
   }
 
-  private buildErrorResponse(
-    exception: unknown,
-    request: Request,
-  ): ErrorResponse {
+  private buildErrorResponse(exception: unknown, request: Request): ErrorResponse {
     const timestamp = new Date().toISOString();
     const path = request.originalUrl;
     const requestId = request.requestId || 'unknown';
@@ -82,9 +79,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
           : (exceptionResponse as any).message || 'An error occurred';
 
       const details =
-        typeof exceptionResponse === 'object'
-          ? (exceptionResponse as any).details
-          : undefined;
+        typeof exceptionResponse === 'object' ? (exceptionResponse as any).details : undefined;
 
       return {
         success: false,
@@ -265,10 +260,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (exception instanceof Error) {
         Sentry.captureException(exception);
       } else {
-        Sentry.captureMessage(
-          `Non-error exception: ${JSON.stringify(exception)}`,
-          'error',
-        );
+        Sentry.captureMessage(`Non-error exception: ${JSON.stringify(exception)}`, 'error');
       }
     });
   }

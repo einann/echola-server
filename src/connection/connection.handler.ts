@@ -37,11 +37,10 @@ export class ConnectionHandler {
       });
 
       // Get user's conversations and join those rooms
-      const participants =
-        await this.prismaService.conversationParticipant.findMany({
-          where: { userId, leftAt: null },
-          select: { conversationId: true },
-        });
+      const participants = await this.prismaService.conversationParticipant.findMany({
+        where: { userId, leftAt: null },
+        select: { conversationId: true },
+      });
 
       for (const participant of participants) {
         void socket.join(`conversation:${participant.conversationId}`);
@@ -86,10 +85,7 @@ export class ConnectionHandler {
     }
   }
 
-  private async deliverQueuedMessages(
-    userId: string,
-    socket: AuthenticatedSocket,
-  ) {
+  private async deliverQueuedMessages(userId: string, socket: AuthenticatedSocket) {
     try {
       const queuedMessages = await this.redisService.getInboxMessages(userId);
 
@@ -112,9 +108,7 @@ export class ConnectionHandler {
       }
 
       if (queuedMessages.length > 0) {
-        console.log(
-          `Delivered ${queuedMessages.length} queued messages to user ${userId}`,
-        );
+        console.log(`Delivered ${queuedMessages.length} queued messages to user ${userId}`);
       }
     } catch (error) {
       console.error('Error delivering queued messages:', error);
@@ -123,11 +117,10 @@ export class ConnectionHandler {
 
   private async broadcastPresenceChange(userId: string, isOnline: boolean) {
     // Get user's conversations
-    const participants =
-      await this.prismaService.conversationParticipant.findMany({
-        where: { userId, leftAt: null },
-        include: { conversation: { include: { participants: true } } },
-      });
+    const participants = await this.prismaService.conversationParticipant.findMany({
+      where: { userId, leftAt: null },
+      include: { conversation: { include: { participants: true } } },
+    });
 
     // Collect all unique user IDs from conversations
     const contactIds = new Set<string>();

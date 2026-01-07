@@ -1,7 +1,7 @@
 # Conversation Implementation - Refactor Summary
 
-**Date:** January 6, 2026
-**Status:** 12/20 Tasks Completed (60%)
+**Date:** January 7, 2026
+**Status:** 15/20 Tasks Completed (75%)
 **Branch:** `fix/conversation-refactor`
 
 ## 📋 Overview
@@ -10,7 +10,7 @@ This document summarizes the comprehensive refactor and enhancement of the conve
 
 ---
 
-## ✅ Completed Tasks (12/20)
+## ✅ Completed Tasks (15/20)
 
 ### 1. **Fixed Critical Bug in `findDirectConversation`**
 **File:** `src/conversations/conversations.service.ts:197-238`
@@ -280,28 +280,96 @@ CREATE INDEX "conversation_participants_left_at_idx" ON "conversation_participan
 
 ---
 
-## ⏳ Remaining Tasks (8/20)
+### 13. **Added Schema Fields for Archive and Pin**
+**Files:**
+- `prisma/schema.prisma:207-210, 224-225` (new fields and indices)
+- `prisma/migrations/20260107114220_add_archive_and_pin_fields/migration.sql`
 
-### 13. **Add Schema Fields for Archive and Pin** (Ready to implement)
-**What's needed:**
-- Add `isArchived`, `isPinned`, `pinnedAt` fields to `ConversationParticipant` model
-- Create database migration
-- Apply migration
+**New Fields on `ConversationParticipant`:**
+```typescript
+isArchived     Boolean   @default(false) @map("is_archived")
+isPinned       Boolean   @default(false) @map("is_pinned")
+pinnedAt       DateTime? @map("pinned_at")
+```
 
-### 14. **Implement Archive/Unarchive**
-**What's needed:**
-- Service methods: `archiveConversation()`, `unarchiveConversation()`
-- Controller endpoints: `POST /:id/archive`, `POST /:id/unarchive`
-- Filter support in `getUserConversations()` query
-- API request examples
+**New Indices:**
+```sql
+CREATE INDEX "conversation_participants_user_id_is_archived_idx" ON "conversation_participants"("user_id", "is_archived");
+CREATE INDEX "conversation_participants_user_id_is_pinned_pinned_at_idx" ON "conversation_participants"("user_id", "is_pinned", "pinned_at");
+```
 
-### 15. **Implement Pin/Unpin**
-**What's needed:**
-- Service methods: `pinConversation()`, `unpinConversation()`
-- Controller endpoints: `POST /:id/pin`, `POST /:id/unpin`
-- Sorting logic: pinned conversations appear first
-- Limit on max pinned conversations (e.g., 5)
-- API request examples
+**Purpose:**
+- `isArchived` - Allows users to archive conversations without deleting them
+- `isPinned` - Allows users to pin important conversations to the top
+- `pinnedAt` - Timestamp for when conversation was pinned (used for sorting)
+
+**Migration Applied:** ✅ Yes
+
+---
+
+### 14. **Implemented Archive/Unarchive**
+**Files:**
+- `src/conversations/conversations.service.ts:447-503` (service methods)
+- `src/conversations/conversations.controller.ts:170-192` (REST endpoints)
+- `src/conversations/dto/pagination.dto.ts:38-41` (archived filter)
+
+**Endpoints:**
+- `POST /conversations/:id/archive` - Archive a conversation
+- `POST /conversations/:id/unarchive` - Unarchive a conversation
+- `GET /conversations?archived=true` - Get archived conversations
+
+**Implementation:**
+- Per-user setting (doesn't affect other participants)
+- Updates `isArchived` field in `ConversationParticipant`
+- Default behavior: archived conversations are hidden from main list
+- Users can explicitly query archived conversations using `?archived=true`
+
+**Example Usage:**
+```http
+POST /conversations/abc123/archive
+GET /conversations?archived=true
+POST /conversations/abc123/unarchive
+```
+
+---
+
+### 15. **Implemented Pin/Unpin**
+**Files:**
+- `src/conversations/conversations.service.ts:505-587` (service methods)
+- `src/conversations/conversations.controller.ts:194-217` (REST endpoints)
+- `src/conversations/conversations.service.ts:267-283` (sorting logic)
+
+**Endpoints:**
+- `POST /conversations/:id/pin` - Pin a conversation
+- `POST /conversations/:id/unpin` - Unpin a conversation
+
+**Implementation:**
+- Per-user setting (doesn't affect other participants)
+- Max 5 pinned conversations per user (enforced)
+- Pinned conversations appear first in list
+- Sorting logic: pinned (by pinnedAt DESC) → unpinned (by updatedAt DESC)
+- Clear error message when pin limit exceeded
+
+**Sorting Behavior:**
+```typescript
+// Pinned conversations first (newest pin first)
+// Then unpinned conversations (most recently updated first)
+isPinned DESC, pinnedAt DESC, updatedAt DESC
+```
+
+**Example Usage:**
+```http
+POST /conversations/abc123/pin
+POST /conversations/abc123/unpin
+```
+
+**Validation:**
+- Cannot pin more than 5 conversations
+- Error message: "You can only pin up to 5 conversations. Unpin another conversation first."
+
+---
+
+## ⏳ Remaining Tasks (5/20)
 
 ### 16. **Implement Rate Limiting**
 **What's needed:**
@@ -360,20 +428,22 @@ CREATE INDEX "conversation_participants_left_at_idx" ON "conversation_participan
 2. `src/common/utils/sanitize.util.ts` - XSS sanitization utility
 3. `CONVERSATION_REFACTOR_SUMMARY.md` - This document
 
-### Modified Files (10)
+### Modified Files (11)
 1. `src/conversations/conversations.service.ts` - Main service with all conversation logic
 2. `src/conversations/conversations.controller.ts` - REST API endpoints
 3. `src/conversations/group-management.service.ts` - Group operations
 4. `src/conversations/groups.handler.ts` - WebSocket handlers (no changes in this session, but exists)
 5. `src/conversations/dto/create-conversation.dto.ts` - Enhanced with sanitization and validation
 6. `src/conversations/dto/group-management.dto.ts` - Enhanced with sanitization and validation
-7. `src/config/env.validation.ts` - Added MAX_GROUP_SIZE
-8. `.env.example` - Added MAX_GROUP_SIZE example
-9. `prisma/schema.prisma` - Added database indices
-10. `api-requests/conversations.http` - Added all new endpoint examples
+7. `src/conversations/dto/pagination.dto.ts` - Added archived filter
+8. `src/config/env.validation.ts` - Added MAX_GROUP_SIZE
+9. `.env.example` - Added MAX_GROUP_SIZE example
+10. `prisma/schema.prisma` - Added database indices and archive/pin fields
+11. `api-requests/conversations.http` - Added all new endpoint examples
 
-### Database Migrations (1)
+### Database Migrations (2)
 1. `prisma/migrations/20260106142526_add_conversation_indices/` - Performance indices
+2. `prisma/migrations/20260107114220_add_archive_and_pin_fields/` - Archive and pin features
 
 ---
 
@@ -396,6 +466,10 @@ CREATE INDEX "conversation_participants_left_at_idx" ON "conversation_participan
 ### Conversation Settings
 - `POST /conversations/:id/mute` - Mute conversation
 - `POST /conversations/:id/unmute` - Unmute conversation
+- `POST /conversations/:id/archive` - Archive conversation
+- `POST /conversations/:id/unarchive` - Unarchive conversation
+- `POST /conversations/:id/pin` - Pin conversation (max 5)
+- `POST /conversations/:id/unpin` - Unpin conversation
 
 ---
 
@@ -536,17 +610,17 @@ Start with task #13 (Archive/Unarchive) as it's next in priority.
 ## 📊 Statistics
 
 - **Total Tasks:** 20
-- **Completed:** 12 (60%)
-- **Remaining:** 8 (40%)
-- **Files Modified:** 10
+- **Completed:** 15 (75%)
+- **Remaining:** 5 (25%)
+- **Files Modified:** 11
 - **Files Created:** 3
-- **Database Migrations:** 1
-- **API Endpoints Added:** 11
-- **Lines of Code Added:** ~800+
+- **Database Migrations:** 2
+- **API Endpoints Added:** 15
+- **Lines of Code Added:** ~1200+
 - **Dependencies Added:** 1
 
 ---
 
-**Last Updated:** January 6, 2026
-**Next Task:** Add schema fields for archive and pin features
+**Last Updated:** January 7, 2026
+**Next Task:** Implement Rate Limiting (Task #16)
 **Branch:** `fix/conversation-refactor`

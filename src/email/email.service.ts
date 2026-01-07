@@ -12,11 +12,7 @@ export class EmailService {
     private readonly logger: Logger,
   ) {}
 
-  async sendEmailVerification(
-    email: string,
-    displayName: string,
-    token: string,
-  ): Promise<void> {
+  async sendEmailVerification(email: string, displayName: string, token: string): Promise<void> {
     const frontendUrl = this.configService.get('FRONTEND_URL', { infer: true });
     const verificationUrl = `${frontendUrl}/verify-email?token=${token}`;
 
@@ -38,11 +34,7 @@ export class EmailService {
     }
   }
 
-  async sendPasswordReset(
-    email: string,
-    displayName: string,
-    token: string,
-  ): Promise<void> {
+  async sendPasswordReset(email: string, displayName: string, token: string): Promise<void> {
     const frontendUrl = this.configService.get('FRONTEND_URL', { infer: true });
     const resetUrl = `${frontendUrl}/reset-password?token=${token}`;
 
@@ -60,10 +52,7 @@ export class EmailService {
       });
       this.logger.log(`Password reset email sent to ${email}`);
     } catch (error) {
-      this.logger.error(
-        `Failed to send password reset email to ${email}`,
-        error,
-      );
+      this.logger.error(`Failed to send password reset email to ${email}`, error);
       throw error;
     }
   }
@@ -81,10 +70,7 @@ export class EmailService {
       });
       this.logger.log(`Password changed notification sent to ${email}`);
     } catch (error) {
-      this.logger.error(
-        `Failed to send password changed email to ${email}`,
-        error,
-      );
+      this.logger.error(`Failed to send password changed email to ${email}`, error);
       // Don't throw - this is a notification email
     }
   }

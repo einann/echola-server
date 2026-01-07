@@ -11,9 +11,7 @@ export class MediaHandler {
   /**
    * Socket event: media:request_upload
    */
-  async handleUploadRequest(
-    dto: MediaUploadRequestDto,
-  ): Promise<PresignedUrlResult> {
+  async handleUploadRequest(dto: MediaUploadRequestDto): Promise<PresignedUrlResult> {
     return this.mediaService.requestUploadUrl(dto);
   }
 
@@ -21,9 +19,7 @@ export class MediaHandler {
    * Socket event: media:confirm_upload
    * İşlem tamamlanınca ProcessedMedia döner, bu MessageHandler'a iletilir
    */
-  async handleUploadConfirm(
-    dto: MediaUploadConfirmDto,
-  ): Promise<ProcessedMedia> {
+  async handleUploadConfirm(dto: MediaUploadConfirmDto): Promise<ProcessedMedia> {
     return this.mediaService.confirmUpload(dto);
   }
 }

@@ -53,8 +53,7 @@ async function bootstrap() {
   // CORS CONFIGURATION
   // ================================
   app.enableCors({
-    origin:
-      configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
+    origin: configService.get<string>('FRONTEND_URL') || 'http://localhost:3000',
     credentials: true,
   });
 
@@ -72,9 +71,7 @@ async function bootstrap() {
 
   process.on('SIGTERM', () => {
     void (async () => {
-      console.log(
-        '⚠️  SIGTERM signal received: closing HTTP server gracefully',
-      );
+      console.log('⚠️  SIGTERM signal received: closing HTTP server gracefully');
       await app.close();
     })();
   });

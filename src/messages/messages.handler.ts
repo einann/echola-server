@@ -15,10 +15,7 @@ import {
   MediaUploadUrlResponse,
   TypingEvent,
 } from './dto/send-message-events.dto';
-import {
-  MessageDeliveredEvent,
-  MessageReadEvent,
-} from './dto/message-status-events.dto';
+import { MessageDeliveredEvent, MessageReadEvent } from './dto/message-status-events.dto';
 import { DeleteMessageDto } from './dto/delete-message.dto';
 
 @Injectable()
@@ -36,10 +33,7 @@ export class MessagesHandler {
   // TEXT MESSAGE
   // ============================================
 
-  async sendTextMessage(
-    client: AuthenticatedSocket,
-    data: SendTextMessageEvent,
-  ): Promise<void> {
+  async sendTextMessage(client: AuthenticatedSocket, data: SendTextMessageEvent): Promise<void> {
     const userId = client.data.userId;
 
     const message = await this.messagesService.sendMessage(userId, {
@@ -160,10 +154,7 @@ export class MessagesHandler {
   // MESSAGE STATUS
   // ============================================
 
-  async markDelivered(
-    client: AuthenticatedSocket,
-    data: MessageDeliveredEvent,
-  ): Promise<void> {
+  async markDelivered(client: AuthenticatedSocket, data: MessageDeliveredEvent): Promise<void> {
     const userId = client.data.userId;
 
     await this.messagesService.markMessageAsDelivered(userId, data.messageId);
@@ -182,10 +173,7 @@ export class MessagesHandler {
     }
   }
 
-  async markRead(
-    client: AuthenticatedSocket,
-    data: MessageReadEvent,
-  ): Promise<void> {
+  async markRead(client: AuthenticatedSocket, data: MessageReadEvent): Promise<void> {
     const userId = client.data.userId;
 
     await this.messagesService.markMessageAsRead(userId, data.messageId);
@@ -208,10 +196,7 @@ export class MessagesHandler {
   // DELETE MESSAGE
   // ============================================
 
-  async deleteMessage(
-    client: AuthenticatedSocket,
-    data: DeleteMessageDto,
-  ): Promise<any> {
+  async deleteMessage(client: AuthenticatedSocket, data: DeleteMessageDto): Promise<any> {
     const userId = client.data.userId;
 
     // Get message before deletion (for conversationId)
@@ -224,17 +209,13 @@ export class MessagesHandler {
     );
 
     // Notify all participants in conversation
-    this.socketService.emitToConversation(
-      message.conversationId,
-      'message_deleted',
-      {
-        messageId: data.messageId,
-        conversationId: message.conversationId,
-        deletedBy: userId,
-        deleteForEveryone: data.deleteForEveryone,
-        deletedAt: result.deletedAt,
-      },
-    );
+    this.socketService.emitToConversation(message.conversationId, 'message_deleted', {
+      messageId: data.messageId,
+      conversationId: message.conversationId,
+      deletedBy: userId,
+      deleteForEveryone: data.deleteForEveryone,
+      deletedAt: result.deletedAt,
+    });
 
     return result;
   }
@@ -267,18 +248,14 @@ export class MessagesHandler {
   // HELPERS
   // ============================================
 
-  private async verifyParticipant(
-    conversationId: string,
-    userId: string,
-  ): Promise<void> {
-    const participant =
-      await this.prismaService.conversationParticipant.findFirst({
-        where: {
-          conversationId,
-          userId,
-          leftAt: null,
-        },
-      });
+  private async verifyParticipant(conversationId: string, userId: string): Promise<void> {
+    const participant = await this.prismaService.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
 
     if (!participant) {
       throw new Error('You are not a participant in this conversation');
@@ -291,14 +268,13 @@ export class MessagesHandler {
     message: any,
   ): Promise<void> {
     // Get other participants
-    const participants =
-      await this.prismaService.conversationParticipant.findMany({
-        where: {
-          conversationId,
-          userId: { not: senderId },
-          leftAt: null,
-        },
-      });
+    const participants = await this.prismaService.conversationParticipant.findMany({
+      where: {
+        conversationId,
+        userId: { not: senderId },
+        leftAt: null,
+      },
+    });
 
     // Invalidate cache
     await this.redisService.invalidateConversationCache(conversationId);
@@ -308,18 +284,10 @@ export class MessagesHandler {
       const isOnline = await this.redisService.isUserOnline(participant.userId);
 
       if (isOnline) {
-        this.socketService.emitToUser(
-          participant.userId,
-          'new_message',
-          message,
-        );
+        this.socketService.emitToUser(participant.userId, 'new_message', message);
 
         // Auto-mark as delivered
-        this.scheduleDeliveryConfirmation(
-          participant.userId,
-          senderId,
-          message.id,
-        );
+        this.scheduleDeliveryConfirmation(participant.userId, senderId, message.id);
       } else {
         // Add to offline inbox
         await this.redisService.addToInbox(participant.userId, message);
@@ -342,10 +310,7 @@ export class MessagesHandler {
     setTimeout(() => {
       void (async () => {
         try {
-          await this.messagesService.markMessageAsDelivered(
-            recipientId,
-            messageId,
-          );
+          await this.messagesService.markMessageAsDelivered(recipientId, messageId);
 
           this.socketService.emitToUser(senderId, 'message_delivered', {
             messageId,

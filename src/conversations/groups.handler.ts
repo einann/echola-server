@@ -21,10 +21,7 @@ export class GroupsHandler {
     private socketService: SocketService,
   ) {}
 
-  async addMembers(
-    client: AuthenticatedSocket,
-    data: AddMembersDto,
-  ): Promise<void> {
+  async addMembers(client: AuthenticatedSocket, data: AddMembersDto): Promise<void> {
     const userId = client.data.userId;
 
     const result = await this.groupManagementService.addMembers(
@@ -37,15 +34,11 @@ export class GroupsHandler {
     client.emit('group:members:added', result);
 
     // Notify all existing members
-    this.socketService.emitToConversation(
-      data.conversationId,
-      'group:member:joined',
-      {
-        conversationId: data.conversationId,
-        members: result.addedMembers,
-        addedBy: userId,
-      },
-    );
+    this.socketService.emitToConversation(data.conversationId, 'group:member:joined', {
+      conversationId: data.conversationId,
+      members: result.addedMembers,
+      addedBy: userId,
+    });
 
     // Notify newly added members and have them join the room
     for (const member of result.addedMembers) {
@@ -69,10 +62,7 @@ export class GroupsHandler {
     });
   }
 
-  async removeMember(
-    client: AuthenticatedSocket,
-    data: RemoveMemberDto,
-  ): Promise<void> {
+  async removeMember(client: AuthenticatedSocket, data: RemoveMemberDto): Promise<void> {
     const adminId = client.data.userId;
 
     const result = await this.groupManagementService.removeMember(
@@ -91,23 +81,17 @@ export class GroupsHandler {
     });
 
     // Remove them from the conversation room
-    const removedUserSockets = await this.socketService.getUserSockets(
-      data.userId,
-    );
+    const removedUserSockets = await this.socketService.getUserSockets(data.userId);
     for (const socket of removedUserSockets) {
       socket.leave(`conversation:${data.conversationId}`);
     }
 
     // Notify remaining members
-    this.socketService.emitToConversation(
-      data.conversationId,
-      'group:member:left',
-      {
-        conversationId: data.conversationId,
-        user: result.removedUser,
-        removedBy: adminId,
-      },
-    );
+    this.socketService.emitToConversation(data.conversationId, 'group:member:left', {
+      conversationId: data.conversationId,
+      user: result.removedUser,
+      removedBy: adminId,
+    });
 
     // Publish to Redis
     await this.redisService.publish(`conversation:${data.conversationId}`, {
@@ -117,16 +101,10 @@ export class GroupsHandler {
     });
   }
 
-  async leaveGroup(
-    client: AuthenticatedSocket,
-    data: LeaveGroupDto,
-  ): Promise<void> {
+  async leaveGroup(client: AuthenticatedSocket, data: LeaveGroupDto): Promise<void> {
     const userId = client.data.userId;
 
-    const result = await this.groupManagementService.leaveGroup(
-      userId,
-      data.conversationId,
-    );
+    const result = await this.groupManagementService.leaveGroup(userId, data.conversationId);
 
     // Acknowledge to user
     client.emit('group:left', result);
@@ -146,15 +124,11 @@ export class GroupsHandler {
     });
 
     // Notify remaining members
-    this.socketService.emitToConversation(
-      data.conversationId,
-      'group:member:left',
-      {
-        conversationId: data.conversationId,
-        user,
-        leftVoluntarily: true,
-      },
-    );
+    this.socketService.emitToConversation(data.conversationId, 'group:member:left', {
+      conversationId: data.conversationId,
+      user,
+      leftVoluntarily: true,
+    });
 
     // Publish to Redis
     await this.redisService.publish(`conversation:${data.conversationId}`, {
@@ -163,10 +137,7 @@ export class GroupsHandler {
     });
   }
 
-  async updateRole(
-    client: AuthenticatedSocket,
-    data: UpdateMemberRoleDto,
-  ): Promise<void> {
+  async updateRole(client: AuthenticatedSocket, data: UpdateMemberRoleDto): Promise<void> {
     const adminId = client.data.userId;
 
     const result = await this.groupManagementService.updateMemberRole(
@@ -187,16 +158,12 @@ export class GroupsHandler {
     });
 
     // Notify all members
-    this.socketService.emitToConversation(
-      data.conversationId,
-      'group:member:role:changed',
-      {
-        conversationId: data.conversationId,
-        user: result.user,
-        newRole: data.role,
-        updatedBy: adminId,
-      },
-    );
+    this.socketService.emitToConversation(data.conversationId, 'group:member:role:changed', {
+      conversationId: data.conversationId,
+      user: result.user,
+      newRole: data.role,
+      updatedBy: adminId,
+    });
 
     // Publish to Redis
     await this.redisService.publish(`conversation:${data.conversationId}`, {
@@ -207,39 +174,28 @@ export class GroupsHandler {
     });
   }
 
-  async updateGroupInfo(
-    client: AuthenticatedSocket,
-    data: UpdateGroupInfoDto,
-  ): Promise<void> {
+  async updateGroupInfo(client: AuthenticatedSocket, data: UpdateGroupInfoDto): Promise<void> {
     const adminId = client.data.userId;
 
-    const result = await this.groupManagementService.updateGroupInfo(
-      adminId,
-      data.conversationId,
-      {
-        name: data.name,
-        description: data.description,
-        avatarUrl: data.avatarUrl,
-      },
-    );
+    const result = await this.groupManagementService.updateGroupInfo(adminId, data.conversationId, {
+      name: data.name,
+      description: data.description,
+      avatarUrl: data.avatarUrl,
+    });
 
     // Acknowledge to admin
     client.emit('group:info:updated', result);
 
     // Notify all members
-    this.socketService.emitToConversation(
-      data.conversationId,
-      'group:info:changed',
-      {
-        conversationId: data.conversationId,
-        updates: {
-          name: data.name,
-          description: data.description,
-          avatarUrl: data.avatarUrl,
-        },
-        updatedBy: adminId,
+    this.socketService.emitToConversation(data.conversationId, 'group:info:changed', {
+      conversationId: data.conversationId,
+      updates: {
+        name: data.name,
+        description: data.description,
+        avatarUrl: data.avatarUrl,
       },
-    );
+      updatedBy: adminId,
+    });
 
     // Publish to Redis
     await this.redisService.publish(`conversation:${data.conversationId}`, {
@@ -253,16 +209,10 @@ export class GroupsHandler {
     });
   }
 
-  async getMembers(
-    client: AuthenticatedSocket,
-    data: { conversationId: string },
-  ): Promise<void> {
+  async getMembers(client: AuthenticatedSocket, data: { conversationId: string }): Promise<void> {
     const userId = client.data.userId;
 
-    const result = await this.groupManagementService.getGroupMembers(
-      userId,
-      data.conversationId,
-    );
+    const result = await this.groupManagementService.getGroupMembers(userId, data.conversationId);
 
     client.emit('group:members:list', result);
   }

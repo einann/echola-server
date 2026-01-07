@@ -27,39 +27,25 @@ export class ConversationsController {
   ) {}
 
   @Post()
-  async createConversation(
-    @Request() req,
-    @Body() createDto: CreateConversationDto,
-  ) {
-    return this.conversationsService.createConversation(
-      req.user.userId,
-      createDto,
-    );
+  async createConversation(@Request() req, @Body() createDto: CreateConversationDto) {
+    return this.conversationsService.createConversation(req.user.userId, createDto);
   }
 
   @Get()
-  async getUserConversations(
-    @Request() req,
-    @Query() paginationQuery: PaginationQueryDto,
-  ) {
+  async getUserConversations(@Request() req, @Query() paginationQuery: PaginationQueryDto) {
     return this.conversationsService.getUserConversations(req.user.userId, {
       limit: paginationQuery.limit,
       cursor: paginationQuery.cursor,
       search: paginationQuery.search,
       type: paginationQuery.type,
       muted: paginationQuery.muted,
+      archived: paginationQuery.archived,
     });
   }
 
   @Get(':id')
-  async getConversationById(
-    @Request() req,
-    @Param('id') conversationId: string,
-  ) {
-    return this.conversationsService.getConversationById(
-      req.user.userId,
-      conversationId,
-    );
+  async getConversationById(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.getConversationById(req.user.userId, conversationId);
   }
 
   // ============================================
@@ -72,11 +58,7 @@ export class ConversationsController {
     @Param('id') conversationId: string,
     @Body() body: { userIds: string[] },
   ) {
-    return this.groupManagementService.addMembers(
-      req.user.userId,
-      conversationId,
-      body.userIds,
-    );
+    return this.groupManagementService.addMembers(req.user.userId, conversationId, body.userIds);
   }
 
   @Delete(':id/members/:userId')
@@ -96,10 +78,7 @@ export class ConversationsController {
   @Post(':id/leave')
   @HttpCode(HttpStatus.OK)
   async leaveGroup(@Request() req, @Param('id') conversationId: string) {
-    return this.groupManagementService.leaveGroup(
-      req.user.userId,
-      conversationId,
-    );
+    return this.groupManagementService.leaveGroup(req.user.userId, conversationId);
   }
 
   @Put(':id/members/:userId/role')
@@ -123,19 +102,12 @@ export class ConversationsController {
     @Param('id') conversationId: string,
     @Body() body: { name?: string; description?: string; avatarUrl?: string },
   ) {
-    return this.groupManagementService.updateGroupInfo(
-      req.user.userId,
-      conversationId,
-      body,
-    );
+    return this.groupManagementService.updateGroupInfo(req.user.userId, conversationId, body);
   }
 
   @Get(':id/members')
   async getGroupMembers(@Request() req, @Param('id') conversationId: string) {
-    return this.groupManagementService.getGroupMembers(
-      req.user.userId,
-      conversationId,
-    );
+    return this.groupManagementService.getGroupMembers(req.user.userId, conversationId);
   }
 
   // ============================================
@@ -145,22 +117,45 @@ export class ConversationsController {
   @Post(':id/mute')
   @HttpCode(HttpStatus.OK)
   async muteConversation(@Request() req, @Param('id') conversationId: string) {
-    return this.conversationsService.muteConversation(
-      req.user.userId,
-      conversationId,
-    );
+    return this.conversationsService.muteConversation(req.user.userId, conversationId);
   }
 
   @Post(':id/unmute')
   @HttpCode(HttpStatus.OK)
-  async unmuteConversation(
-    @Request() req,
-    @Param('id') conversationId: string,
-  ) {
-    return this.conversationsService.unmuteConversation(
-      req.user.userId,
-      conversationId,
-    );
+  async unmuteConversation(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.unmuteConversation(req.user.userId, conversationId);
+  }
+
+  // ============================================
+  // Archive/Unarchive Conversation
+  // ============================================
+
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  async archiveConversation(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.archiveConversation(req.user.userId, conversationId);
+  }
+
+  @Post(':id/unarchive')
+  @HttpCode(HttpStatus.OK)
+  async unarchiveConversation(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.unarchiveConversation(req.user.userId, conversationId);
+  }
+
+  // ============================================
+  // Pin/Unpin Conversation
+  // ============================================
+
+  @Post(':id/pin')
+  @HttpCode(HttpStatus.OK)
+  async pinConversation(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.pinConversation(req.user.userId, conversationId);
+  }
+
+  @Post(':id/unpin')
+  @HttpCode(HttpStatus.OK)
+  async unpinConversation(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.unpinConversation(req.user.userId, conversationId);
   }
 
   // ============================================
@@ -169,13 +164,7 @@ export class ConversationsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  async deleteConversation(
-    @Request() req,
-    @Param('id') conversationId: string,
-  ) {
-    return this.conversationsService.deleteConversation(
-      req.user.userId,
-      conversationId,
-    );
+  async deleteConversation(@Request() req, @Param('id') conversationId: string) {
+    return this.conversationsService.deleteConversation(req.user.userId, conversationId);
   }
 }

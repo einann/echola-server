@@ -47,10 +47,7 @@ export class StorageService {
     try {
       await this.s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
     } catch (error: any) {
-      if (
-        error.name === 'NotFound' ||
-        error.$metadata?.httpStatusCode === 404
-      ) {
+      if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
         await this.s3Client.send(new CreateBucketCommand({ Bucket: bucket }));
         console.log(`Bucket created: ${bucket}`);
       } else {

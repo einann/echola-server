@@ -34,14 +34,8 @@ import {
   RequestMediaUploadEvent,
   SendTextMessageEvent,
 } from '../messages/dto/send-message-events.dto';
-import {
-  AddReactionEvent,
-  RemoveReactionEvent,
-} from '../messages/dto/message-reaction-events.dto';
-import {
-  MessageDeliveredEvent,
-  MessageReadEvent,
-} from '../messages/dto/message-status-events.dto';
+import { AddReactionEvent, RemoveReactionEvent } from '../messages/dto/message-reaction-events.dto';
+import { MessageDeliveredEvent, MessageReadEvent } from '../messages/dto/message-status-events.dto';
 import { JwtPayload } from './types/jwt.types';
 import { RedisConversationEvent } from '../redis/types/redis-data.types';
 import { AllWsExceptionsFilter } from '../common/filters/ws-exception.filter';
@@ -57,9 +51,7 @@ import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
 })
 @UsePipes(new ValidationPipe())
 @UseFilters(new AllWsExceptionsFilter())
-export class ChatGateway
-  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
-{
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
   server: Server;
 
@@ -186,10 +178,7 @@ export class ChatGateway
 
   // Typing
   @SubscribeMessage('typing:start')
-  handleTyping(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: TypingEvent,
-  ) {
+  handleTyping(@ConnectedSocket() client: AuthenticatedSocket, @MessageBody() data: TypingEvent) {
     this.messagesHandler.handleTyping(client, data);
   }
 
@@ -326,17 +315,14 @@ export class ChatGateway
   // ============================================
 
   private async subscribeToRedisChannels() {
-    await this.redisService.subscribe(
-      'conversation:*',
-      (data: RedisConversationEvent) => {
-        if (data.type === 'new_message' && data.message) {
-          this.socketService.emitToConversation(
-            data.message.conversationId,
-            'new_message',
-            data.message,
-          );
-        }
-      },
-    );
+    await this.redisService.subscribe('conversation:*', (data: RedisConversationEvent) => {
+      if (data.type === 'new_message' && data.message) {
+        this.socketService.emitToConversation(
+          data.message.conversationId,
+          'new_message',
+          data.message,
+        );
+      }
+    });
   }
 }

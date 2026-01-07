@@ -35,17 +35,11 @@ export class ImageProcessor {
     return { optimized, thumbnail, metadata };
   }
 
-  private async optimize(
-    buffer: Buffer,
-    metadata: sharp.Metadata,
-  ): Promise<Buffer> {
+  private async optimize(buffer: Buffer, metadata: sharp.Metadata): Promise<Buffer> {
     let pipeline = sharp(buffer);
 
     // Boyut sınırlama
-    if (
-      metadata.width > this.MAX_DIMENSION ||
-      metadata.height > this.MAX_DIMENSION
-    ) {
+    if (metadata.width > this.MAX_DIMENSION || metadata.height > this.MAX_DIMENSION) {
       pipeline = pipeline.resize(this.MAX_DIMENSION, this.MAX_DIMENSION, {
         fit: 'inside',
         withoutEnlargement: true,
@@ -53,9 +47,7 @@ export class ImageProcessor {
     }
 
     // Format ve kalite
-    return pipeline
-      .jpeg({ quality: this.QUALITY, progressive: true })
-      .toBuffer();
+    return pipeline.jpeg({ quality: this.QUALITY, progressive: true }).toBuffer();
   }
 
   private async generateThumbnail(buffer: Buffer): Promise<Buffer> {
