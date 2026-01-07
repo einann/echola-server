@@ -116,10 +116,7 @@ export class UsersService {
     }
 
     // Verify current password
-    const isPasswordValid = await bcrypt.compare(
-      changePasswordDto.currentPassword,
-      user.password,
-    );
+    const isPasswordValid = await bcrypt.compare(changePasswordDto.currentPassword, user.password);
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Current password is incorrect');
@@ -135,10 +132,7 @@ export class UsersService {
     });
 
     // Send notification email
-    await this.emailService.sendPasswordChanged(
-      user.email,
-      user.displayName || 'User',
-    );
+    await this.emailService.sendPasswordChanged(user.email, user.displayName || 'User');
 
     // Optionally: Invalidate all refresh tokens except current device
     // This would require deviceId parameter
@@ -157,9 +151,7 @@ export class UsersService {
     // Validate mime type
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedMimeTypes.includes(dto.mimeType)) {
-      throw new BadRequestException(
-        'Invalid file type. Only JPEG, PNG, and WebP are allowed',
-      );
+      throw new BadRequestException('Invalid file type. Only JPEG, PNG, and WebP are allowed');
     }
 
     const fileKey = `avatars/${userId}/${randomBytes(16).toString('hex')}.${this.getExtension(dto.mimeType)}`;
@@ -228,9 +220,7 @@ export class UsersService {
   // User Search
   // ========================================
 
-  async searchUsers(
-    searchDto: SearchUsersDto,
-  ): Promise<SearchUsersResponseDto> {
+  async searchUsers(searchDto: SearchUsersDto): Promise<SearchUsersResponseDto> {
     const { query, limit = 20, offset = 0 } = searchDto;
 
     const [users, total] = await Promise.all([
@@ -318,11 +308,7 @@ export class UsersService {
     });
 
     // Send email
-    await this.emailService.sendEmailVerification(
-      user.email,
-      user.displayName || 'User',
-      token,
-    );
+    await this.emailService.sendEmailVerification(user.email, user.displayName || 'User', token);
 
     return { message: 'Verification email sent' };
   }
@@ -355,9 +341,7 @@ export class UsersService {
     return { message: 'Email verified successfully' };
   }
 
-  async resendVerificationEmail(
-    dto: ResendVerificationDto,
-  ): Promise<{ message: string }> {
+  async resendVerificationEmail(dto: ResendVerificationDto): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -409,11 +393,7 @@ export class UsersService {
     });
 
     // Send email
-    await this.emailService.sendPasswordReset(
-      user.email,
-      user.displayName || 'User',
-      token,
-    );
+    await this.emailService.sendPasswordReset(user.email, user.displayName || 'User', token);
 
     return { message: 'If the email exists, a password reset link was sent' };
   }
