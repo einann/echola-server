@@ -75,8 +75,27 @@ model User {
   messageStatuses          MessageStatus[]
   messageReactions         MessageReaction[]
   createdConversations     Conversation[]            @relation("ConversationCreator")
+  blockedUsers             BlockedUser[]             @relation("BlockedBy")
+  blockedByUsers           BlockedUser[]             @relation("BlockedUser")
 
   @@map("users")
+}
+
+model BlockedUser {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")    // User who blocked
+  blockedId String   @map("blocked_id") // User who was blocked
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user    User @relation("BlockedBy", fields: [userId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, blockedId])
+  @@index([userId])
+  @@index([blockedId])
+  @@map("blocked_users")
 }
 
 model Device {
@@ -202,7 +221,10 @@ model ConversationParticipant {
   lastReadAt     DateTime? @map("last_read_at")
   
   // Notification settings
-  isMuted        Boolean  @default(false) @map("is_muted")
+  isMuted           Boolean  @default(false) @map("is_muted")
+  notifyOnMessage   Boolean  @default(true) @map("notify_on_message")
+  notifyOnMention   Boolean  @default(true) @map("notify_on_mention")
+  notifySound       Boolean  @default(true) @map("notify_sound")
 
   // Archive and pin features
   isArchived     Boolean   @default(false) @map("is_archived")

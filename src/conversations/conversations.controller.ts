@@ -159,6 +159,25 @@ export class ConversationsController {
   }
 
   // ============================================
+  // Notification Preferences
+  // ============================================
+
+  @Put(':id/notification-preferences')
+  @HttpCode(HttpStatus.OK)
+  async updateNotificationPreferences(
+    @Request() req,
+    @Param('id') conversationId: string,
+    @Body()
+    preferences: { notifyOnMessage?: boolean; notifyOnMention?: boolean; notifySound?: boolean },
+  ) {
+    return this.conversationsService.updateNotificationPreferences(
+      req.user.userId,
+      conversationId,
+      preferences,
+    );
+  }
+
+  // ============================================
   // Bulk Mark as Read
   // ============================================
 

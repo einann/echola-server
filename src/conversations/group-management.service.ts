@@ -18,6 +18,22 @@ export class GroupManagementService {
   ) {}
 
   // ============================================
+  // Helper Methods
+  // ============================================
+
+  private async checkIfBlocked(userId: string, targetUserId: string): Promise<boolean> {
+    const blocked = await this.prisma.blockedUser.findFirst({
+      where: {
+        OR: [
+          { userId, blockedId: targetUserId },
+          { userId: targetUserId, blockedId: userId },
+        ],
+      },
+    });
+    return !!blocked;
+  }
+
+  // ============================================
   // Permission Checks
   // ============================================
 
@@ -106,6 +122,24 @@ export class GroupManagementService {
 
     if (users.length !== userIds.length) {
       throw new NotFoundException('One or more users not found');
+    }
+
+    // Check if any user is blocked by existing group members
+    const existingMembers = await this.prisma.conversationParticipant.findMany({
+      where: {
+        conversationId,
+        leftAt: null,
+      },
+      select: { userId: true },
+    });
+
+    for (const userId of userIds) {
+      for (const member of existingMembers) {
+        const isBlocked = await this.checkIfBlocked(member.userId, userId);
+        if (isBlocked) {
+          throw new ForbiddenException('Cannot add user to group: blocked relationship exists');
+        }
+      }
     }
 
     // Check which users are currently active participants

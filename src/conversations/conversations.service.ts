@@ -9,13 +9,31 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ConversationType } from 'generated/prisma/client';
 import { EnvironmentVariables } from '../config/env.validation';
+import { SocketService } from '../socket/socket.service';
 
 @Injectable()
 export class ConversationsService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService<EnvironmentVariables>,
+    private socketService: SocketService,
   ) {}
+
+  // ============================================
+  // Helper Methods
+  // ============================================
+
+  private async checkIfBlocked(userId: string, targetUserId: string): Promise<boolean> {
+    const blocked = await this.prisma.blockedUser.findFirst({
+      where: {
+        OR: [
+          { userId, blockedId: targetUserId },
+          { userId: targetUserId, blockedId: userId },
+        ],
+      },
+    });
+    return !!blocked;
+  }
 
   async createConversation(userId: string, createDto: CreateConversationDto) {
     const { type, participantIds, name, description, avatarUrl } = createDto;
@@ -61,6 +79,14 @@ export class ConversationsService {
       throw new NotFoundException('One or more participants not found');
     }
 
+    // Check if any participant is blocked
+    for (const participantId of participantIds) {
+      const isBlocked = await this.checkIfBlocked(userId, participantId);
+      if (isBlocked) {
+        throw new ForbiddenException('Cannot create conversation with a blocked user');
+      }
+    }
+
     // Create conversation with participants
     const conversation = await this.prisma.conversation.create({
       data: {
@@ -101,6 +127,14 @@ export class ConversationsService {
           },
         },
       },
+    });
+
+    // Emit WebSocket event to all participants
+    const allParticipantIds = [userId, ...participantIds];
+    allParticipantIds.forEach((participantId) => {
+      this.socketService.emitToUser(participantId, 'conversation:created', {
+        conversation,
+      });
     });
 
     return conversation;
@@ -630,6 +664,49 @@ export class ConversationsService {
     return {
       conversationId,
       message: 'Conversation deleted successfully',
+    };
+  }
+
+  // ============================================
+  // Notification Preferences
+  // ============================================
+
+  async updateNotificationPreferences(
+    userId: string,
+    conversationId: string,
+    preferences: {
+      notifyOnMessage?: boolean;
+      notifyOnMention?: boolean;
+      notifySound?: boolean;
+    },
+  ) {
+    // Verify user is participant
+    const participant = await this.prisma.conversationParticipant.findFirst({
+      where: {
+        conversationId,
+        userId,
+        leftAt: null,
+      },
+    });
+
+    if (!participant) {
+      throw new ForbiddenException('You are not a participant in this conversation');
+    }
+
+    // Update notification preferences
+    const updated = await this.prisma.conversationParticipant.update({
+      where: { id: participant.id },
+      data: preferences,
+    });
+
+    return {
+      conversationId,
+      preferences: {
+        notifyOnMessage: updated.notifyOnMessage,
+        notifyOnMention: updated.notifyOnMention,
+        notifySound: updated.notifySound,
+      },
+      message: 'Notification preferences updated successfully',
     };
   }
 

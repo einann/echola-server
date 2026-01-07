@@ -445,6 +445,134 @@ export class UsersService {
   }
 
   // ========================================
+  // Block/Unblock Users
+  // ========================================
+
+  async blockUser(userId: string, targetUserId: string) {
+    // Prevent self-blocking
+    if (userId === targetUserId) {
+      throw new BadRequestException('Cannot block yourself');
+    }
+
+    // Verify target user exists
+    const targetUser = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        displayName: true,
+        username: true,
+      },
+    });
+
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Check if already blocked
+    const existingBlock = await this.prisma.blockedUser.findUnique({
+      where: {
+        userId_blockedId: {
+          userId,
+          blockedId: targetUserId,
+        },
+      },
+    });
+
+    if (existingBlock) {
+      throw new ConflictException('User is already blocked');
+    }
+
+    // Create block record
+    await this.prisma.blockedUser.create({
+      data: {
+        userId,
+        blockedId: targetUserId,
+      },
+    });
+
+    return {
+      blockedUserId: targetUserId,
+      message: `User ${targetUser.displayName || targetUser.username || 'unknown'} blocked successfully`,
+    };
+  }
+
+  async unblockUser(userId: string, targetUserId: string) {
+    // Prevent self-unblocking (shouldn't happen but check anyway)
+    if (userId === targetUserId) {
+      throw new BadRequestException('Invalid operation');
+    }
+
+    // Check if block exists
+    const existingBlock = await this.prisma.blockedUser.findUnique({
+      where: {
+        userId_blockedId: {
+          userId,
+          blockedId: targetUserId,
+        },
+      },
+    });
+
+    if (!existingBlock) {
+      throw new NotFoundException('User is not blocked');
+    }
+
+    // Delete block record
+    await this.prisma.blockedUser.delete({
+      where: {
+        userId_blockedId: {
+          userId,
+          blockedId: targetUserId,
+        },
+      },
+    });
+
+    return {
+      unblockedUserId: targetUserId,
+      message: 'User unblocked successfully',
+    };
+  }
+
+  async getBlockedUsers(userId: string) {
+    const blockedUsers = await this.prisma.blockedUser.findMany({
+      where: { userId },
+      include: {
+        blocked: {
+          select: {
+            id: true,
+            displayName: true,
+            username: true,
+            avatarUrl: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return {
+      blockedUsers: blockedUsers.map((block) => ({
+        ...block.blocked,
+        blockedAt: block.createdAt,
+      })),
+      total: blockedUsers.length,
+    };
+  }
+
+  async isUserBlocked(userId: string, targetUserId: string): Promise<boolean> {
+    const blocked = await this.prisma.blockedUser.findFirst({
+      where: {
+        OR: [
+          { userId, blockedId: targetUserId },
+          { userId: targetUserId, blockedId: userId },
+        ],
+      },
+    });
+    return !!blocked;
+  }
+
+  // ========================================
   // Helper Methods
   // ========================================
 

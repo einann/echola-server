@@ -86,7 +86,7 @@ The application follows NestJS modular architecture with these key modules:
 - **AuthModule**: JWT-based authentication with refresh tokens, device management
 - **GatewayModule**: WebSocket gateway (`/chat` namespace) coordinating all real-time events
 - **MessagesModule**: Message CRUD, delivery/read status tracking, typing indicators
-- **ConversationsModule**: Direct and group conversation management
+- **ConversationsModule**: Direct and group conversation management, archive/pin, mute, notification preferences
 - **PresenceModule**: User online/offline status, typing indicators
 - **ConnectionModule**: WebSocket connection lifecycle management
 - **StorageModule**: File uploads to S3/MinIO with presigned URLs
@@ -94,7 +94,7 @@ The application follows NestJS modular architecture with these key modules:
 - **RedisModule**: Global Redis client for pub/sub and caching
 - **PrismaModule**: Global database client
 - **LoggerModule**: Pino-based structured logging
-- **UserModule**: User services, update avatar, email verification, reset password, search user
+- **UserModule**: User profile, avatar upload, email verification, password reset, user search, block/unblock users
 
 ### Global Modules
 
@@ -122,6 +122,10 @@ WebSocket authentication:
 - Token verified in `handleConnection()` using `JWT_ACCESS_SECRET`
 - User ID and device ID attached to `socket.data` for all subsequent events
 
+WebSocket events emitted:
+
+- `conversation:created`: Emitted to all participants when a new conversation is created (direct or group)
+
 ### Redis Pub/Sub
 
 Redis is used for cross-server message delivery in distributed deployments:
@@ -142,7 +146,11 @@ Media uploads use a two-step presigned URL pattern:
 ### Middleware Stack (Applied in Order)
 
 1. **RequestContextMiddleware**: Request context setup (must be first)
-2. **RateLimitMiddleware**: Rate limiting per IP/user
+2. **RateLimitMiddleware**: Rate limiting per IP/user (Redis-based, distributed)
+   - Auth endpoints: 5 requests / 15 minutes
+   - Conversation creation: 10 requests / 1 hour
+   - File uploads: 50 requests / 1 hour
+   - Default: 100 requests / 1 minute
 3. **Global Validation Pipe**: DTO validation with `class-validator`
 4. **Transform Interceptor**: Standardizes all API responses
 5. **Timeout Interceptor**: 30-second request timeout
@@ -159,8 +167,13 @@ Key models:
 - **RefreshToken**: JWT refresh tokens tied to devices
 - **EmailVerificationToken**: Tokens for email verification
 - **PasswordResetToken**: Tokens for password reset
+- **BlockedUser**: User blocking relationships (bidirectional)
 - **Conversation**: Direct or group conversations
-- **ConversationParticipant**: User membership in conversations
+- **ConversationParticipant**: User membership in conversations with settings:
+  - Notification preferences: `notifyOnMessage`, `notifyOnMention`, `notifySound`
+  - Archive/pin: `isArchived`, `isPinned`, `pinnedAt`
+  - Mute: `isMuted`
+  - Read tracking: `lastReadAt`
 - **Message**: Text/media/system messages with reply support
 - **MessageAttachment**: Media files (images/videos/documents) with S3 keys
 - **MessageStatus**: Per-user delivery/read status
@@ -232,6 +245,60 @@ Access MinIO console at `http://localhost:9001` with credentials from `.env`.
 2. Run `npx prisma migrate dev --name descriptive_name`
 3. Prisma client auto-regenerates to `generated/prisma/`
 4. Import types from `@prisma/client` (points to generated directory)
+
+### Block Validation Pattern
+
+When implementing features that involve user interactions:
+
+1. Check `BlockedUser` table for bidirectional blocks
+2. Use helper method: `checkIfBlocked(userId, targetUserId)`
+3. Throw `ForbiddenException` with clear message if blocked
+4. Already implemented in:
+   - Conversation creation (direct and group)
+   - Adding members to groups
+
+## Key Features
+
+### Conversation Management
+
+**Archive/Unarchive:**
+- `POST /conversations/:id/archive` - Archive a conversation (per-user)
+- `POST /conversations/:id/unarchive` - Unarchive a conversation
+- `GET /conversations?archived=true` - Filter archived conversations
+
+**Pin/Unpin:**
+- `POST /conversations/:id/pin` - Pin a conversation (max 5 per user)
+- `POST /conversations/:id/unpin` - Unpin a conversation
+- Pinned conversations appear first in list, sorted by `pinnedAt` DESC
+
+**Mute/Unmute:**
+- `POST /conversations/:id/mute` - Mute notifications
+- `POST /conversations/:id/unmute` - Unmute notifications
+
+**Notification Preferences:**
+- `PUT /conversations/:id/notification-preferences` - Update per-conversation notification settings
+- Settings: `notifyOnMessage`, `notifyOnMention`, `notifySound`
+
+**Bulk Operations:**
+- `POST /conversations/mark-all-read` - Mark all conversations as read
+
+**Search and Filters:**
+- Query parameters: `search`, `type`, `muted`, `archived`
+- Cursor-based pagination with `limit` and `cursor`
+- Example: `GET /conversations?search=john&type=GROUP&muted=false&limit=20`
+
+### User Blocking
+
+**Block/Unblock Users:**
+- `POST /users/block/:userId` - Block a user
+- `DELETE /users/block/:userId` - Unblock a user
+- `GET /users/blocked` - Get list of blocked users
+
+**Blocking Rules:**
+- Bidirectional: If A blocks B OR B blocks A, they cannot interact
+- Prevents: Creating conversations, adding to groups
+- Cannot block yourself
+- Cannot block the same user twice
 
 ## Testing
 

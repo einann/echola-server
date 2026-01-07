@@ -94,6 +94,24 @@ Content-Type: {{contentType}}
 Authorization: Bearer {{token}}
 
 ### ========================================
+### Block/Unblock Users
+### ========================================
+
+@targetUserId = 121b6903-c359-494a-913f-6a651952f5e7
+
+### Block a User
+POST {{baseUrl}}/users/block/{{targetUserId}}
+Authorization: Bearer {{token}}
+
+### Unblock a User
+DELETE {{baseUrl}}/users/block/{{targetUserId}}
+Authorization: Bearer {{token}}
+
+### Get Blocked Users List
+GET {{baseUrl}}/users/blocked
+Authorization: Bearer {{token}}
+
+### ========================================
 ### Password Reset
 ### ========================================
 

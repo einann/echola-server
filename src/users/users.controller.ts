@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  Param,
   Post,
   Put,
   Query,
@@ -98,6 +100,30 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   async sendVerification(@Request() req) {
     return this.usersService.sendVerificationEmail(req.user.userId);
+  }
+
+  // ========================================
+  // Block/Unblock Users
+  // ========================================
+
+  @Post('block/:targetUserId')
+  @UseGuards(JwtAccessGuard)
+  @HttpCode(HttpStatus.OK)
+  async blockUser(@Request() req, @Param('targetUserId') targetUserId: string) {
+    return this.usersService.blockUser(req.user.userId, targetUserId);
+  }
+
+  @Delete('block/:targetUserId')
+  @UseGuards(JwtAccessGuard)
+  @HttpCode(HttpStatus.OK)
+  async unblockUser(@Request() req, @Param('targetUserId') targetUserId: string) {
+    return this.usersService.unblockUser(req.user.userId, targetUserId);
+  }
+
+  @Get('blocked')
+  @UseGuards(JwtAccessGuard)
+  async getBlockedUsers(@Request() req) {
+    return this.usersService.getBlockedUsers(req.user.userId);
   }
 
   // ========================================

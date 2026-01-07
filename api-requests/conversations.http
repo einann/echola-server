@@ -135,6 +135,17 @@ Authorization: Bearer {{token}}
 POST {{baseUrl}}/conversations/{{conversationId}}/unpin
 Authorization: Bearer {{token}}
 
+### Update Notification Preferences
+PUT {{baseUrl}}/conversations/{{conversationId}}/notification-preferences
+Content-Type: {{contentType}}
+Authorization: Bearer {{token}}
+
+{
+  "notifyOnMessage": true,
+  "notifyOnMention": true,
+  "notifySound": false
+}
+
 ### Mark All Conversations as Read
 POST {{baseUrl}}/conversations/mark-all-read
 Authorization: Bearer {{token}}
