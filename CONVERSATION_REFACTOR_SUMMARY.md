@@ -1,7 +1,7 @@
 # Conversation Implementation - Refactor Summary
 
 **Date:** January 7, 2026
-**Status:** 15/20 Tasks Completed (75%)
+**Status:** 17/20 Tasks Completed (85%)
 **Branch:** `fix/conversation-refactor`
 
 ## 📋 Overview
@@ -10,7 +10,7 @@ This document summarizes the comprehensive refactor and enhancement of the conve
 
 ---
 
-## ✅ Completed Tasks (15/20)
+## ✅ Completed Tasks (17/20)
 
 ### 1. **Fixed Critical Bug in `findDirectConversation`**
 **File:** `src/conversations/conversations.service.ts:197-238`
@@ -369,23 +369,92 @@ POST /conversations/abc123/unpin
 
 ---
 
-## ⏳ Remaining Tasks (5/20)
+### 16. **Implemented Rate Limiting for Conversation Creation**
+**File:** `src/common/middleware/rate-limit.middleware.ts:63-80`
 
-### 16. **Implement Rate Limiting**
-**What's needed:**
-- Install `@nestjs/throttler` package
-- Configure throttler module
-- Apply rate limiting to conversation creation endpoint
-- Consider different limits for authenticated users
-- Suggested limit: 10 conversations per minute
+**Implementation:**
+- Extended existing Redis-based rate limiter (no new packages needed)
+- Added specific rule for `POST /conversations` endpoint
+- Rate limit: **10 conversations per hour** (per user/IP)
 
-### 17. **Implement Bulk Mark as Read**
-**What's needed:**
-- Service method: `markAllConversationsAsRead(userId)`
-- Controller endpoint: `POST /conversations/mark-all-read`
-- Update `lastReadAt` for all user's conversations
-- WebSocket notification to update UI
-- API request example
+**Configuration:**
+```typescript
+if (path === '/conversations' && method === 'POST') {
+  return {
+    windowMs: 60 * 60 * 1000, // 1 hour
+    maxRequests: 10,
+    message: 'Too many conversations created, please try again later',
+  };
+}
+```
+
+**Benefits:**
+- ✅ Prevents conversation spam abuse
+- ✅ Protects database from bloat
+- ✅ Uses existing distributed Redis infrastructure
+- ✅ Proper HTTP headers (X-RateLimit-*, Retry-After)
+- ✅ Tracks by user ID (authenticated) or IP (unauthenticated)
+
+**Why Not @nestjs/throttler?**
+- Already have a superior Redis-based implementation
+- Current middleware is more flexible and feature-rich
+- No migration cost or additional dependencies
+
+---
+
+### 17. **Implemented Bulk Mark as Read**
+**Files:**
+- `src/conversations/conversations.service.ts:640-656` (service method)
+- `src/conversations/conversations.controller.ts:165-169` (REST endpoint)
+- `api-requests/conversations.http:138-140` (API example)
+
+**Endpoint:**
+- `POST /conversations/mark-all-read` - Mark all conversations as read
+
+**Implementation:**
+- Updates `lastReadAt` timestamp for all active conversations
+- Only affects user's own conversations (doesn't affect other participants)
+- Returns count of updated conversations
+- Excludes conversations user has left (`leftAt: null`)
+
+**Service Method:**
+```typescript
+async markAllConversationsAsRead(userId: string) {
+  const result = await this.prisma.conversationParticipant.updateMany({
+    where: {
+      userId,
+      leftAt: null, // Only active conversations
+    },
+    data: {
+      lastReadAt: new Date(),
+    },
+  });
+
+  return {
+    updated: result.count,
+    message: `Marked ${result.count} conversation(s) as read`,
+  };
+}
+```
+
+**Response Format:**
+```json
+{
+  "updated": 15,
+  "message": "Marked 15 conversation(s) as read"
+}
+```
+
+**Use Case:**
+- "Mark all as read" button in UI
+- Clear all unread badges at once
+- Improves UX by avoiding manual per-conversation marking
+
+**Note:** WebSocket notifications for real-time UI updates will be implemented in Task #18 (WebSocket Events).
+
+---
+
+## ⏳ Remaining Tasks (3/20)
 
 ### 18. **Add WebSocket Events for Conversation Creation**
 **What's needed:**
@@ -428,7 +497,7 @@ POST /conversations/abc123/unpin
 2. `src/common/utils/sanitize.util.ts` - XSS sanitization utility
 3. `CONVERSATION_REFACTOR_SUMMARY.md` - This document
 
-### Modified Files (11)
+### Modified Files (12)
 1. `src/conversations/conversations.service.ts` - Main service with all conversation logic
 2. `src/conversations/conversations.controller.ts` - REST API endpoints
 3. `src/conversations/group-management.service.ts` - Group operations
@@ -440,6 +509,7 @@ POST /conversations/abc123/unpin
 9. `.env.example` - Added MAX_GROUP_SIZE example
 10. `prisma/schema.prisma` - Added database indices and archive/pin fields
 11. `api-requests/conversations.http` - Added all new endpoint examples
+12. `src/common/middleware/rate-limit.middleware.ts` - Added conversation creation rate limiting
 
 ### Database Migrations (2)
 1. `prisma/migrations/20260106142526_add_conversation_indices/` - Performance indices
@@ -470,6 +540,7 @@ POST /conversations/abc123/unpin
 - `POST /conversations/:id/unarchive` - Unarchive conversation
 - `POST /conversations/:id/pin` - Pin conversation (max 5)
 - `POST /conversations/:id/unpin` - Unpin conversation
+- `POST /conversations/mark-all-read` - Mark all conversations as read
 
 ---
 
@@ -610,17 +681,17 @@ Start with task #13 (Archive/Unarchive) as it's next in priority.
 ## 📊 Statistics
 
 - **Total Tasks:** 20
-- **Completed:** 15 (75%)
-- **Remaining:** 5 (25%)
-- **Files Modified:** 11
+- **Completed:** 17 (85%)
+- **Remaining:** 3 (15%)
+- **Files Modified:** 12
 - **Files Created:** 3
 - **Database Migrations:** 2
-- **API Endpoints Added:** 15
-- **Lines of Code Added:** ~1200+
+- **API Endpoints Added:** 16
+- **Lines of Code Added:** ~1300+
 - **Dependencies Added:** 1
 
 ---
 
 **Last Updated:** January 7, 2026
-**Next Task:** Implement Rate Limiting (Task #16)
+**Next Task:** Add WebSocket Events for Conversation Creation (Task #18)
 **Branch:** `fix/conversation-refactor`

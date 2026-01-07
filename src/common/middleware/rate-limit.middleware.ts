@@ -11,7 +11,7 @@ export class RateLimitMiddleware implements NestMiddleware {
       const path = this.getCleanPath(req.originalUrl);
 
       // Get rate limit config based on route
-      const config = this.getRateLimitConfig(path);
+      const config = this.getRateLimitConfig(path, req.method);
 
       // Skip rate limiting for health checks
       if (path === '/health' || path === '/') {
@@ -60,13 +60,22 @@ export class RateLimitMiddleware implements NestMiddleware {
     return originalUrl.split('?')[0];
   }
 
-  private getRateLimitConfig(path: string) {
+  private getRateLimitConfig(path: string, method: string) {
     // Stricter limits for auth endpoints
     if (path.includes('/auth/login') || path.includes('/auth/register')) {
       return {
         windowMs: 15 * 60 * 1000, // 15 minutes
         maxRequests: 5,
         message: 'Too many authentication attempts, please try again later',
+      };
+    }
+
+    // Strict limits for conversation creation
+    if (path === '/conversations' && method === 'POST') {
+      return {
+        windowMs: 60 * 60 * 1000, // 1 hour
+        maxRequests: 10,
+        message: 'Too many conversations created, please try again later',
       };
     }
 

@@ -135,6 +135,10 @@ Authorization: Bearer {{token}}
 POST {{baseUrl}}/conversations/{{conversationId}}/unpin
 Authorization: Bearer {{token}}
 
+### Mark All Conversations as Read
+POST {{baseUrl}}/conversations/mark-all-read
+Authorization: Bearer {{token}}
+
 ### Delete Conversation (Direct conversations only)
 DELETE {{baseUrl}}/conversations/d7467004-35c9-48c6-a055-6986f507d770
 Authorization: Bearer {{token}}

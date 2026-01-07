@@ -159,6 +159,16 @@ export class ConversationsController {
   }
 
   // ============================================
+  // Bulk Mark as Read
+  // ============================================
+
+  @Post('mark-all-read')
+  @HttpCode(HttpStatus.OK)
+  async markAllConversationsAsRead(@Request() req) {
+    return this.conversationsService.markAllConversationsAsRead(req.user.userId);
+  }
+
+  // ============================================
   // Delete Conversation
   // ============================================
 

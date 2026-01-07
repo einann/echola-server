@@ -632,4 +632,26 @@ export class ConversationsService {
       message: 'Conversation deleted successfully',
     };
   }
+
+  // ============================================
+  // Bulk Mark as Read
+  // ============================================
+
+  async markAllConversationsAsRead(userId: string) {
+    // Update lastReadAt for all user's active conversations
+    const result = await this.prisma.conversationParticipant.updateMany({
+      where: {
+        userId,
+        leftAt: null, // Only active conversations
+      },
+      data: {
+        lastReadAt: new Date(),
+      },
+    });
+
+    return {
+      updated: result.count,
+      message: `Marked ${result.count} conversation(s) as read`,
+    };
+  }
 }
