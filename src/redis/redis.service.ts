@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { RedisConversationEvent, QueuedMessage, UploadMetadata } from './types/redis-data.types';
@@ -6,6 +6,7 @@ import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
   private readonly client: Redis;
   private readonly pubClient: Redis;
   private readonly subClient: Redis;
@@ -22,9 +23,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
-    this.client.on('error', (err) => console.error('Redis Client Error:', err));
-    this.pubClient.on('error', (err) => console.error('Redis Pub Client Error:', err));
-    this.subClient.on('error', (err) => console.error('Redis Sub Client Error:', err));
+    this.client.on('error', (err) => this.logger.error('Redis Client Error:', err));
+    this.pubClient.on('error', (err) => this.logger.error('Redis Pub Client Error:', err));
+    this.subClient.on('error', (err) => this.logger.error('Redis Sub Client Error:', err));
   }
 
   // ============================================
@@ -216,7 +217,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
           const parsed = JSON.parse(msg) as RedisConversationEvent;
           callback(parsed);
         } catch (error) {
-          console.error('Error parsing Redis message:', error);
+          this.logger.error('Error parsing Redis message:', error);
         }
       }
     });
@@ -237,7 +238,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
           const parsed = JSON.parse(msg) as RedisConversationEvent;
           callback(chan, parsed);
         } catch (error) {
-          console.error('Error parsing Redis pmessage:', error);
+          this.logger.error('Error parsing Redis pmessage:', error);
         }
       }
     });

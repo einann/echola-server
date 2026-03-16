@@ -20,6 +20,7 @@ import { MediaModule } from './media/media.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
 import { EmailModule } from './email/email.module';
+import { MetricsModule } from './metrics/metrics.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { EmailModule } from './email/email.module';
     StorageModule,
     SocketModule,
     UsersModule,
+    MetricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

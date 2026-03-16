@@ -1,9 +1,11 @@
-import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
+  private readonly logger = new Logger(RateLimitMiddleware.name);
+
   constructor(private redisService: RedisService) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
@@ -49,7 +51,7 @@ export class RateLimitMiddleware implements NestMiddleware {
         throw error;
       }
       // If Redis fails, allow request (fail open)
-      console.error('Rate limit middleware error:', error);
+      this.logger.error('Rate limit middleware error:', error);
       next();
     }
   }

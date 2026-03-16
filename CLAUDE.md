@@ -95,6 +95,8 @@ The application follows NestJS modular architecture with these key modules:
 - **PrismaModule**: Global database client
 - **LoggerModule**: Pino-based structured logging
 - **UserModule**: User profile, avatar upload, email verification, password reset, user search, block/unblock users
+- **MetricsModule**: Prometheus metrics at `/metrics` endpoint
+- **HealthModule**: Health checks at `/health`, `/health/live`, `/health/ready`
 
 ### Global Modules
 
@@ -212,7 +214,9 @@ Uses `nestjs-pino` with `pino-pretty` for structured logging:
 - **AllWsExceptionsFilter**: WebSocket-specific exception handling
 - Sentry initialized in `main.ts` before any setup
 
-## Docker Services
+## Docker
+
+### Development Services
 
 Default ports (configured in `docker-compose.yml`):
 
@@ -222,6 +226,24 @@ Default ports (configured in `docker-compose.yml`):
 - MinIO Console: `9001:9001` (web UI)
 
 Access MinIO console at `http://localhost:9001` with credentials from `.env`.
+
+### Production Docker Image
+
+Build and run the production Docker image:
+
+```bash
+# Build image
+docker build -t echola-server .
+
+# Run container
+docker run -p 3000:3000 --env-file .env echola-server
+```
+
+The Dockerfile uses:
+- Multi-stage build for smaller image size
+- Non-root user for security
+- Health check on `/health` endpoint
+- `dumb-init` for proper signal handling
 
 ## Common Patterns
 
@@ -306,6 +328,36 @@ When implementing features that involve user interactions:
 - E2E tests: `test/` directory with `jest-e2e.json` config
 - Use `@nestjs/testing` to create testing modules
 - Mock PrismaService and RedisService in tests
+
+## CI/CD
+
+GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push/PR to `main` and `develop`:
+
+1. **Lint**: ESLint and Prettier checks
+2. **Build**: TypeScript compilation and Prisma generation
+3. **Test**: Unit tests with coverage (requires PostgreSQL and Redis services)
+4. **Docker**: Build Docker image (on main branch only)
+
+## Monitoring
+
+### Health Checks
+
+- `GET /health` - Full health check (database, Redis, MinIO, memory, disk)
+- `GET /health/live` - Liveness probe (is the app running?)
+- `GET /health/ready` - Readiness probe (is the app ready for traffic?)
+
+### Prometheus Metrics
+
+- `GET /metrics` - Prometheus-compatible metrics endpoint
+- Default metrics: Node.js runtime metrics
+- Custom metrics: HTTP requests, WebSocket connections, messages sent, auth attempts
+
+### Security
+
+- **Helmet**: Security headers (CSP, X-Frame-Options, HSTS, etc.)
+- **CORS**: Configured via `FRONTEND_URL` environment variable
+- **Trust Proxy**: Enabled for rate limiting behind load balancers
+- **Graceful Shutdown**: 15-second timeout for clean shutdown
 
 # When implementing a new library or framework, or adding a feature that uses them, check the latest documentation using context7.
 

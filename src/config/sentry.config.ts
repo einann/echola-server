@@ -1,7 +1,10 @@
 import * as Sentry from '@sentry/node';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { EnvironmentVariables } from './env.validation';
+
+const logger = new Logger('SentryConfig');
 
 export function initializeSentry(configService: ConfigService<EnvironmentVariables>) {
   const dsn = configService.get('SENTRY_DSN', { infer: true });
@@ -9,7 +12,7 @@ export function initializeSentry(configService: ConfigService<EnvironmentVariabl
 
   // Only initialize if DSN is provided
   if (!dsn) {
-    console.log('⚠️  Sentry DSN not provided - error tracking disabled');
+    logger.warn('Sentry DSN not provided - error tracking disabled');
     return;
   }
 
@@ -49,5 +52,5 @@ export function initializeSentry(configService: ConfigService<EnvironmentVariabl
     },
   });
 
-  console.log('✅ Sentry initialized for error tracking');
+  logger.log('Sentry initialized for error tracking');
 }

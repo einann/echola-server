@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SocketService } from '../socket/socket.service';
@@ -15,6 +15,8 @@ import { AuthenticatedSocket } from '../gateway/types/socket.types';
 
 @Injectable()
 export class ConnectionHandler {
+  private readonly logger = new Logger(ConnectionHandler.name);
+
   constructor(
     private prismaService: PrismaService,
     private redisService: RedisService,
@@ -52,10 +54,10 @@ export class ConnectionHandler {
       // Notify user's contacts that they came online
       await this.broadcastPresenceChange(userId, true);
 
-      console.log(`Client connected: ${socket.id}, User: ${userId}`);
+      this.logger.log(`Client connected: ${socket.id}, User: ${userId}`);
       return true;
     } catch (error) {
-      console.error('Connection setup error:', error);
+      this.logger.error('Connection setup error:', error);
       return false;
     }
   }
@@ -77,10 +79,10 @@ export class ConnectionHandler {
       // Notify user's contacts that they went offline
       await this.broadcastPresenceChange(userId, false);
 
-      console.log(`User disconnected: ${userId}`);
+      this.logger.log(`User disconnected: ${userId}`);
       return true;
     } catch (error) {
-      console.error('Disconnection error:', error);
+      this.logger.error('Disconnection error:', error);
       return false;
     }
   }
@@ -108,10 +110,10 @@ export class ConnectionHandler {
       }
 
       if (queuedMessages.length > 0) {
-        console.log(`Delivered ${queuedMessages.length} queued messages to user ${userId}`);
+        this.logger.log(`Delivered ${queuedMessages.length} queued messages to user ${userId}`);
       }
     } catch (error) {
-      console.error('Error delivering queued messages:', error);
+      this.logger.error('Error delivering queued messages:', error);
     }
   }
 

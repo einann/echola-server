@@ -59,7 +59,17 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   createIOServer(port: number, options?: ServerOptions): Server {
-    const server = super.createIOServer(port, options) as Server;
+    const frontendUrl = this.configService.get('FRONTEND_URL', { infer: true });
+
+    const serverOptions: Partial<ServerOptions> = {
+      ...options,
+      cors: {
+        origin: frontendUrl || 'http://localhost:3000',
+        credentials: true,
+      },
+    };
+
+    const server = super.createIOServer(port, serverOptions) as Server;
 
     server.adapter(this.adapterConstructor);
 

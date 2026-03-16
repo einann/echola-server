@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
@@ -16,6 +16,7 @@ import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class StorageService {
+  private readonly logger = new Logger(StorageService.name);
   private readonly s3Client: S3Client;
 
   constructor(private configService: ConfigService<EnvironmentVariables>) {
@@ -49,7 +50,7 @@ export class StorageService {
     } catch (error: any) {
       if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
         await this.s3Client.send(new CreateBucketCommand({ Bucket: bucket }));
-        console.log(`Bucket created: ${bucket}`);
+        this.logger.log(`Bucket created: ${bucket}`);
       } else {
         throw error;
       }
@@ -162,5 +163,14 @@ export class StorageService {
 
   private buildPublicUrl(bucket: StorageBucket, fileKey: string): string {
     return `${process.env.S3_ENDPOINT}/${bucket}/${fileKey}`;
+  }
+
+  /**
+   * Check if storage is healthy by verifying bucket accessibility
+   */
+  async checkHealth(): Promise<boolean> {
+    const bucket = this.configService.get('S3_BUCKET_NAME', { infer: true })!;
+    await this.s3Client.send(new HeadBucketCommand({ Bucket: bucket }));
+    return true;
   }
 }

@@ -9,7 +9,7 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Logger, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthenticatedSocket, SocketData } from './types/socket.types';
@@ -43,15 +43,13 @@ import { EnvironmentVariables } from 'src/config/env.validation';
 import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
 
 @WebSocketGateway({
-  cors: {
-    origin: '*', // TODO: Update with process.env.FRONTEND_URL
-    credentials: true,
-  },
   namespace: '/chat',
 })
 @UsePipes(new ValidationPipe())
 @UseFilters(new AllWsExceptionsFilter())
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
+  private readonly logger = new Logger(ChatGateway.name);
+
   @WebSocketServer()
   server: Server;
 
@@ -105,7 +103,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
       // Delegate connection setup to handler
       await this.connectionHandler.handleUserConnected(client, userId);
     } catch (error) {
-      console.error('Connection error:', error);
+      this.logger.error('Connection error:', error);
       client.disconnect();
     }
   }
