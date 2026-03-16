@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { SocketService } from '../socket/socket.service';
@@ -15,9 +16,8 @@ import { AuthenticatedSocket } from '../gateway/types/socket.types';
 
 @Injectable()
 export class ConnectionHandler {
-  private readonly logger = new Logger(ConnectionHandler.name);
-
   constructor(
+    private readonly logger: Logger,
     private prismaService: PrismaService,
     private redisService: RedisService,
     private socketService: SocketService,

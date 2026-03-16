@@ -1,17 +1,20 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from 'nestjs-pino';
 import Redis from 'ioredis';
 import { RedisConversationEvent, QueuedMessage, UploadMetadata } from './types/redis-data.types';
 import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(RedisService.name);
   private readonly client: Redis;
   private readonly pubClient: Redis;
   private readonly subClient: Redis;
 
-  constructor(private configService: ConfigService<EnvironmentVariables>) {
+  constructor(
+    private readonly logger: Logger,
+    private configService: ConfigService<EnvironmentVariables>,
+  ) {
     const redisConfig = {
       host: this.configService.get('REDIS_HOST', { infer: true }),
       port: this.configService.get('REDIS_PORT', { infer: true }),

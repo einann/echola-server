@@ -9,7 +9,8 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { UseFilters, UsePipes, ValidationPipe } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AuthenticatedSocket, SocketData } from './types/socket.types';
@@ -48,12 +49,11 @@ import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
 @UsePipes(new ValidationPipe())
 @UseFilters(new AllWsExceptionsFilter())
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
-  private readonly logger = new Logger(ChatGateway.name);
-
   @WebSocketServer()
   server: Server;
 
   constructor(
+    private readonly logger: Logger,
     private jwtService: JwtService,
     private configService: ConfigService<EnvironmentVariables>,
     private socketService: SocketService,

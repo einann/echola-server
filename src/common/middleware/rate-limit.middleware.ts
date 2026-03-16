@@ -1,12 +1,14 @@
-import { Injectable, Logger, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NestMiddleware, HttpException, HttpStatus } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import { Request, Response, NextFunction } from 'express';
 import { RedisService } from '../../redis/redis.service';
 
 @Injectable()
 export class RateLimitMiddleware implements NestMiddleware {
-  private readonly logger = new Logger(RateLimitMiddleware.name);
-
-  constructor(private redisService: RedisService) {}
+  constructor(
+    private readonly logger: Logger,
+    private redisService: RedisService,
+  ) {}
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { Logger } from 'nestjs-pino';
 import {
   S3Client,
   PutObjectCommand,
@@ -16,10 +17,12 @@ import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class StorageService {
-  private readonly logger = new Logger(StorageService.name);
   private readonly s3Client: S3Client;
 
-  constructor(private configService: ConfigService<EnvironmentVariables>) {
+  constructor(
+    private readonly logger: Logger,
+    private configService: ConfigService<EnvironmentVariables>,
+  ) {
     this.s3Client = new S3Client({
       endpoint: this.configService.get('S3_ENDPOINT', { infer: true })!,
       region: this.configService.get('S3_REGION', { infer: true })!,
