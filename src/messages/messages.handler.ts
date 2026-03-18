@@ -7,6 +7,7 @@ import { MediaService } from '../media/media.service';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocketService } from '../socket/socket.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { AuthenticatedSocket } from '../gateway/types/socket.types';
 import {
   SendTextMessageEvent,
@@ -17,6 +18,7 @@ import {
 } from './dto/send-message-events.dto';
 import { MessageDeliveredEvent, MessageReadEvent } from './dto/message-status-events.dto';
 import { DeleteMessageDto } from './dto/delete-message.dto';
+import { ForwardMessageEvent } from './dto/forward-message.dto';
 
 @Injectable()
 export class MessagesHandler {
@@ -26,6 +28,7 @@ export class MessagesHandler {
     private redisService: RedisService,
     private prismaService: PrismaService,
     private socketService: SocketService,
+    private notificationsService: NotificationsService,
     @Inject(Logger) private readonly logger: Logger,
   ) {}
 
@@ -221,6 +224,66 @@ export class MessagesHandler {
   }
 
   // ============================================
+  // FORWARD MESSAGE
+  // ============================================
+
+  async forwardMessage(
+    client: AuthenticatedSocket,
+    data: ForwardMessageEvent,
+  ): Promise<{ forwardedMessages: any[] }> {
+    const userId = client.data.userId;
+
+    const forwardedMessages = await this.messagesService.forwardMessage(userId, {
+      messageId: data.messageId,
+      targetConversationIds: data.targetConversationIds,
+    });
+
+    // Acknowledge to sender
+    client.emit('message_forwarded', {
+      tempId: data.tempId,
+      originalMessageId: data.messageId,
+      forwardedMessages,
+    });
+
+    // Deliver to participants in each target conversation
+    for (const message of forwardedMessages) {
+      await this.deliverToParticipants(message.conversationId, userId, message);
+    }
+
+    this.logger.log(
+      {
+        userId,
+        originalMessageId: data.messageId,
+        targetCount: data.targetConversationIds.length,
+      },
+      'Message forwarded via WebSocket',
+    );
+
+    return { forwardedMessages };
+  }
+
+  // ============================================
+  // SEARCH MESSAGES
+  // ============================================
+
+  async searchMessages(
+    client: AuthenticatedSocket,
+    data: { conversationId: string; query: string; limit?: number; offset?: number },
+  ): Promise<any> {
+    const userId = client.data.userId;
+
+    const result = await this.messagesService.searchMessages(
+      userId,
+      data.conversationId,
+      data.query,
+      data.limit || 20,
+      data.offset || 0,
+    );
+
+    return result;
+  }
+
+  // ============================================
   // TYPING INDICATOR
   // ============================================
 
@@ -267,6 +330,27 @@ export class MessagesHandler {
     senderId: string,
     message: any,
   ): Promise<void> {
+    // Get conversation details for notification
+    const conversation = await this.prismaService.conversation.findUnique({
+      where: { id: conversationId },
+      select: {
+        type: true,
+        name: true,
+      },
+    });
+
+    // Get sender info
+    const sender = await this.prismaService.user.findUnique({
+      where: { id: senderId },
+      select: {
+        displayName: true,
+        username: true,
+      },
+    });
+
+    const senderName = sender?.displayName || sender?.username || 'Someone';
+    const isGroup = conversation?.type === 'GROUP';
+
     // Get other participants
     const participants = await this.prismaService.conversationParticipant.findMany({
       where: {
@@ -291,6 +375,18 @@ export class MessagesHandler {
       } else {
         // Add to offline inbox
         await this.redisService.addToInbox(participant.userId, message);
+
+        // Send push notification for offline users
+        void this.notificationsService.sendNewMessageNotification({
+          recipientId: participant.userId,
+          senderId,
+          senderName,
+          conversationId,
+          conversationName: conversation?.name || undefined,
+          messageContent: message.content || '',
+          messageType: message.type,
+          isGroup,
+        });
       }
     }
 

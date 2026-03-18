@@ -3,7 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { StorageService } from '../storage/storage.service';
 import { StorageBucket } from '../storage/enums';
-import { ImageProcessor, VideoProcessor } from './processors';
+import { ImageProcessor, VideoProcessor, AudioProcessor } from './processors';
 import { MediaType } from './enums';
 import { ProcessedMedia } from './interfaces';
 import { MediaUploadRequestDto, MediaUploadConfirmDto } from './dto';
@@ -15,6 +15,7 @@ export class MediaService {
     private readonly storageService: StorageService,
     private readonly imageProcessor: ImageProcessor,
     private readonly videoProcessor: VideoProcessor,
+    private readonly audioProcessor: AudioProcessor,
   ) {}
 
   /**
@@ -38,7 +39,7 @@ export class MediaService {
     const buffer = await this.storageService.getBuffer(StorageBucket.TEMP, dto.fileKey);
 
     // 2. Media tipine göre işle
-    const processed = await this.processMedia(buffer, dto.mediaType);
+    const processed = await this.processMedia(buffer, dto.mediaType, dto.mimeType);
 
     // 3. İşlenmiş dosyaları yükle
     const result = await this.uploadProcessedMedia(processed, dto.conversationId, dto.mediaType);
@@ -59,10 +60,12 @@ export class MediaService {
   private async processMedia(
     buffer: Buffer,
     mediaType: MediaType,
+    mimeType?: string,
   ): Promise<{
     mainBuffer: Buffer;
     thumbnailBuffer?: Buffer;
     metadata: any;
+    waveformData?: number[];
   }> {
     switch (mediaType) {
       case MediaType.IMAGE: {
@@ -83,11 +86,15 @@ export class MediaService {
         };
       }
 
-      case MediaType.AUDIO:
+      case MediaType.AUDIO: {
+        const audioMimeType = mimeType || 'audio/mpeg';
+        const result = this.audioProcessor.process(buffer, audioMimeType);
         return {
           mainBuffer: buffer,
-          metadata: { mimeType: 'audio/mpeg', size: buffer.length },
+          metadata: result.metadata,
+          waveformData: result.waveformData,
         };
+      }
 
       case MediaType.DOCUMENT:
         return {
@@ -105,7 +112,12 @@ export class MediaService {
   }
 
   private async uploadProcessedMedia(
-    processed: { mainBuffer: Buffer; thumbnailBuffer?: Buffer; metadata: any },
+    processed: {
+      mainBuffer: Buffer;
+      thumbnailBuffer?: Buffer;
+      metadata: any;
+      waveformData?: number[];
+    },
     conversationId: string,
     mediaType: MediaType,
   ): Promise<ProcessedMedia> {
@@ -140,6 +152,7 @@ export class MediaService {
       // @ts-expect-error 'TODO: düzeltilecek'
       thumbnailUrl: thumbnailResult?.url,
       metadata: processed.metadata,
+      waveformData: processed.waveformData,
     };
   }
 

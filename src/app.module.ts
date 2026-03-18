@@ -21,6 +21,7 @@ import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
 import { EmailModule } from './email/email.module';
 import { MetricsModule } from './metrics/metrics.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { MetricsModule } from './metrics/metrics.module';
     SocketModule,
     UsersModule,
     MetricsModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

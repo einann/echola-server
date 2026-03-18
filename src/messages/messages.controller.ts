@@ -14,6 +14,7 @@ import { MessagesService } from './messages.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { DeleteMessageDto } from './dto/delete-message.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { ForwardMessageDto } from './dto/forward-message.dto';
 
 @Controller('messages')
 @UseGuards(JwtAccessGuard)
@@ -77,5 +78,29 @@ export class MessagesController {
   @Get('conversation/:conversationId/unread-count')
   async getUnreadCount(@Request() req, @Param('conversationId') conversationId: string) {
     return this.messagesService.getUnreadCount(req.user.userId, conversationId);
+  }
+
+  @Post('forward')
+  async forwardMessage(@Request() req, @Body() dto: ForwardMessageDto) {
+    return this.messagesService.forwardMessage(req.user.userId, dto);
+  }
+
+  @Get('conversation/:conversationId/search')
+  async searchMessages(
+    @Request() req,
+    @Param('conversationId') conversationId: string,
+    @Query('q') query: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    const limitNum = limit ? parseInt(limit, 10) : 20;
+    const offsetNum = offset ? parseInt(offset, 10) : 0;
+    return this.messagesService.searchMessages(
+      req.user.userId,
+      conversationId,
+      query,
+      limitNum,
+      offsetNum,
+    );
   }
 }

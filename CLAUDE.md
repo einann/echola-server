@@ -97,6 +97,7 @@ The application follows NestJS modular architecture with these key modules:
 - **UserModule**: User profile, avatar upload, email verification, password reset, user search, block/unblock users
 - **MetricsModule**: Prometheus metrics at `/metrics` endpoint
 - **HealthModule**: Health checks at `/health`, `/health/live`, `/health/ready`
+- **NotificationsModule**: Push notifications via Firebase Cloud Messaging (FCM)
 
 ### Global Modules
 
@@ -105,6 +106,7 @@ The application follows NestJS modular architecture with these key modules:
 - **PrismaModule**: Database access throughout the app
 - **RedisModule**: Pub/sub and caching
 - **StorageModule**: File upload/download capabilities
+- **NotificationsModule**: Push notifications throughout the app
 
 ### WebSocket Architecture
 
@@ -176,8 +178,8 @@ Key models:
   - Archive/pin: `isArchived`, `isPinned`, `pinnedAt`
   - Mute: `isMuted`
   - Read tracking: `lastReadAt`
-- **Message**: Text/media/system messages with reply support
-- **MessageAttachment**: Media files (images/videos/documents) with S3 keys
+- **Message**: Text/media/system messages with reply and forwarding support
+- **MessageAttachment**: Media files (images/videos/documents/audio) with S3 keys and voice waveform data
 - **MessageStatus**: Per-user delivery/read status
 - **MessageReaction**: Emoji reactions on messages
 
@@ -199,6 +201,7 @@ Required env vars (see `.env.example`):
 - Monitoring: `SENTRY_DSN`
 - Email/SMPT: `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
 - Limits: `MAX_IMAGE_SIZE`, `MAX_VIDEO_SIZE`, `MAX_DOCUMENT_SIZE`, `MAX_GROUP_SIZE`
+- Firebase (optional): `FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`
 
 ### Logging
 
@@ -321,6 +324,41 @@ When implementing features that involve user interactions:
 - Prevents: Creating conversations, adding to groups
 - Cannot block yourself
 - Cannot block the same user twice
+
+### Message Forwarding
+
+**Forward messages to other conversations:**
+- `POST /messages/forward` - Forward a message to multiple conversations
+- WebSocket event: `message:forward`
+- Preserves original sender info via `forwardedFromUserId`
+- Copies all attachments to forwarded message
+- Supports forwarding to multiple conversations at once
+
+### Voice Messages
+
+**Voice message support with waveform visualization:**
+- Audio files processed by `AudioProcessor`
+- Generates waveform data (100 normalized amplitude peaks)
+- Duration estimation based on file size and codec
+- Waveform stored in `MessageAttachment.waveformData`
+
+### Push Notifications (FCM)
+
+**Firebase Cloud Messaging integration:**
+- `POST /notifications/fcm-token` - Register FCM token for device
+- `DELETE /notifications/fcm-token` - Unregister FCM token
+- Automatic push for offline users when messages arrive
+- Respects conversation mute and notification preferences
+- Automatically removes invalid/expired tokens
+
+### Message Search
+
+**Full-text search within conversations:**
+- `GET /messages/conversation/:id/search?q=query` - Search messages
+- WebSocket event: `message:search`
+- PostgreSQL GIN index for efficient full-text search
+- Supports pagination with `limit` and `offset`
+- Returns matching messages with full context
 
 ## Testing
 

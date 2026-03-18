@@ -148,6 +148,21 @@ export class EnvironmentVariables {
   @IsNumber()
   @Min(2)
   MAX_GROUP_SIZE: number;
+
+  // ============================================
+  // Firebase Configuration (for Push Notifications)
+  // ============================================
+  @IsOptional()
+  @IsString()
+  FIREBASE_PROJECT_ID?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_PRIVATE_KEY?: string;
+
+  @IsOptional()
+  @IsString()
+  FIREBASE_CLIENT_EMAIL?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

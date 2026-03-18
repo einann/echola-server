@@ -72,6 +72,7 @@ model User {
   passwordResetTokens      PasswordResetToken[]
   conversationParticipants ConversationParticipant[]
   sentMessages             Message[]                 @relation("SentMessages")
+  forwardedMessages        Message[]                 @relation("ForwardedByUser")
   messageStatuses          MessageStatus[]
   messageReactions         MessageReaction[]
   createdConversations     Conversation[]            @relation("ConversationCreator")
@@ -252,73 +253,84 @@ model Message {
   id             String      @id @default(uuid())
   conversationId String      @map("conversation_id")
   senderId       String      @map("sender_id")
-  
+
   // Message type ve content
   type        MessageType @default(TEXT)
   content     String?     // Text veya caption
-  
+
   // Reply support
   replyToId   String?  @map("reply_to_id")
-  
+
+  // Forwarding support
+  forwardedFromMessageId String? @map("forwarded_from_message_id")
+  forwardedFromUserId    String? @map("forwarded_from_user_id")
+
   // Edit/Delete tracking
   isEdited    Boolean  @default(false) @map("is_edited")
   isDeleted   Boolean  @default(false) @map("is_deleted")
-  
+
   // Timestamps
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   editedAt  DateTime? @map("edited_at")
   deletedAt DateTime? @map("deleted_at")
-  
+
   // Relations
-  conversation Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User              @relation("SentMessages", fields: [senderId], references: [id])
-  replyTo      Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies      Message[]         @relation("MessageReplies")
-  statuses     MessageStatus[]
-  reactions    MessageReaction[]
-  attachments  MessageAttachment[]
-  
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation("SentMessages", fields: [senderId], references: [id])
+  replyTo        Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]         @relation("MessageReplies")
+  forwardedFrom  Message?          @relation("ForwardedMessages", fields: [forwardedFromMessageId], references: [id], onDelete: SetNull)
+  forwards       Message[]         @relation("ForwardedMessages")
+  forwardedBy    User?             @relation("ForwardedByUser", fields: [forwardedFromUserId], references: [id], onDelete: SetNull)
+  statuses       MessageStatus[]
+  reactions      MessageReaction[]
+  attachments    MessageAttachment[]
+
   @@index([conversationId, createdAt(sort: Desc)])
   @@index([senderId])
   @@index([type])
+  @@index([forwardedFromMessageId])
   @@map("messages")
 }
 
 model MessageAttachment {
   id        String    @id @default(uuid())
   messageId String    @map("message_id")
-  
+
   // Media identification
   mediaType MediaType @map("media_type")
   mimeType  String    @map("mime_type")  // "image/jpeg", "video/mp4"
-  
+
   // Storage references (kritik!)
   fileKey      String  @map("file_key")       // S3/MinIO key
   bucket       String                          // Hangi bucket'ta
   url          String                          // Public/signed URL
   thumbnailKey String? @map("thumbnail_key")  // Thumbnail key (varsa)
   thumbnailUrl String? @map("thumbnail_url")
-  
+
   // File metadata
   fileName     String? @map("file_name")      // Original filename
   fileSize     Int     @map("file_size")      // Bytes
-  
+
   // Media-specific metadata
   width        Int?                            // Image/Video
   height       Int?                            // Image/Video
   duration     Float?                          // Video/Audio (seconds)
-  
+
+  // Voice message waveform data (array of peak values 0-1)
+  waveformData Float[] @map("waveform_data")
+
   isProcessed  Boolean @default(true) @map("is_processed")
-  
+
   order        Int     @default(0)
-  
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   // Relations
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  
+
   @@index([messageId])
   @@index([fileKey])
   @@index([bucket, createdAt])

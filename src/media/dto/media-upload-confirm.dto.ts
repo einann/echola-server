@@ -3,13 +3,17 @@ import { MediaType } from '../enums';
 
 export class MediaUploadConfirmDto {
   @IsString()
-  fileKey: string; // Temp bucket'taki key
+  fileKey: string; // Temp bucket key
 
   @IsEnum(MediaType)
   mediaType: MediaType;
 
   @IsString()
   conversationId: string;
+
+  @IsString()
+  @IsOptional()
+  mimeType?: string; // Original mimeType for audio processing
 
   @IsString()
   @IsOptional()

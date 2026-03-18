@@ -10,13 +10,14 @@ import {
 import { Logger } from 'nestjs-pino';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { DeliveryStatus, MessageType, MediaType } from 'generated/prisma/client';
+import { DeliveryStatus, MessageType, MediaType, Message } from 'generated/prisma/client';
 import { CreateMediaMessageDto } from './dto/create-media-message.dto';
 import { ConfigService } from '@nestjs/config';
 import { EnvironmentVariables } from 'src/config/env.validation';
 import { StorageService } from 'src/storage/storage.service';
 import { StorageBucket } from 'src/storage/enums';
 import { SendMessageDto } from './dto/send-message.dto';
+import { ForwardMessageDto } from './dto/forward-message.dto';
 
 @Injectable()
 export class MessagesService {
@@ -159,6 +160,7 @@ export class MessagesService {
             width: dto.media.metadata.width,
             height: dto.media.metadata.height,
             duration: dto.media.metadata.duration,
+            waveformData: dto.media.waveformData || [],
           },
         },
       },
@@ -501,6 +503,200 @@ export class MessagesService {
     });
 
     return { unreadCount: count };
+  }
+
+  // ============================================
+  // FORWARD MESSAGE
+  // ============================================
+
+  async forwardMessage(senderId: string, dto: ForwardMessageDto) {
+    // Get the original message with attachments
+    const originalMessage = await this.prisma.message.findUnique({
+      where: { id: dto.messageId },
+      include: {
+        attachments: true,
+        sender: {
+          select: {
+            id: true,
+            displayName: true,
+            username: true,
+          },
+        },
+      },
+    });
+
+    if (!originalMessage) {
+      throw new NotFoundException('Message not found');
+    }
+
+    if (originalMessage.isDeleted) {
+      throw new BadRequestException('Cannot forward a deleted message');
+    }
+
+    // Verify sender can access the original message's conversation
+    await this.verifyParticipant(originalMessage.conversationId, senderId);
+
+    // Verify sender is participant in all target conversations
+    for (const targetConversationId of dto.targetConversationIds) {
+      await this.verifyParticipant(targetConversationId, senderId);
+    }
+
+    // Determine the original sender for forwarding metadata
+    // If the message was already forwarded, keep the original sender
+    const forwardedFromUserId = originalMessage.forwardedFromUserId || originalMessage.senderId;
+    const forwardedFromMessageId = originalMessage.forwardedFromMessageId || originalMessage.id;
+
+    const forwardedMessages: Message[] = [];
+
+    // Create forwarded message in each target conversation
+    for (const targetConversationId of dto.targetConversationIds) {
+      const recipients = await this.getRecipients(targetConversationId, senderId);
+
+      // Create the forwarded message
+      const forwardedMessage = await this.prisma.message.create({
+        data: {
+          conversationId: targetConversationId,
+          senderId,
+          type: originalMessage.type,
+          content: originalMessage.content,
+          forwardedFromMessageId,
+          forwardedFromUserId,
+          statuses: {
+            create: recipients.map((recipient) => ({
+              userId: recipient.userId,
+              status: DeliveryStatus.SENT,
+            })),
+          },
+          // Copy attachments if any
+          attachments:
+            originalMessage.attachments.length > 0
+              ? {
+                  create: originalMessage.attachments.map((attachment) => ({
+                    mediaType: attachment.mediaType,
+                    mimeType: attachment.mimeType,
+                    fileKey: attachment.fileKey,
+                    bucket: attachment.bucket,
+                    url: attachment.url,
+                    thumbnailKey: attachment.thumbnailKey,
+                    thumbnailUrl: attachment.thumbnailUrl,
+                    fileName: attachment.fileName,
+                    fileSize: attachment.fileSize,
+                    width: attachment.width,
+                    height: attachment.height,
+                    duration: attachment.duration,
+                    waveformData: attachment.waveformData,
+                    order: attachment.order,
+                  })),
+                }
+              : undefined,
+        },
+        include: this.messageInclude,
+      });
+
+      await this.touchConversation(targetConversationId);
+      forwardedMessages.push(forwardedMessage);
+    }
+
+    this.logger.log(
+      {
+        originalMessageId: dto.messageId,
+        forwardedToCount: dto.targetConversationIds.length,
+        senderId,
+      },
+      'Message forwarded',
+    );
+
+    return forwardedMessages;
+  }
+
+  // ============================================
+  // SEARCH MESSAGES
+  // ============================================
+
+  async searchMessages(
+    userId: string,
+    conversationId: string,
+    query: string,
+    limit = 20,
+    offset = 0,
+  ) {
+    // Verify user is participant
+    await this.verifyParticipant(conversationId, userId);
+
+    if (!query || query.trim().length < 2) {
+      throw new BadRequestException('Search query must be at least 2 characters');
+    }
+
+    const searchTerm = query.trim();
+
+    // Use PostgreSQL full-text search with ts_vector
+    const messages = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        conversation_id: string;
+        sender_id: string;
+        type: string;
+        content: string;
+        created_at: Date;
+        is_edited: boolean;
+        is_deleted: boolean;
+      }>
+    >`
+      SELECT id, conversation_id, sender_id, type, content, created_at, is_edited, is_deleted
+      FROM messages
+      WHERE conversation_id = ${conversationId}
+        AND is_deleted = false
+        AND content IS NOT NULL
+        AND to_tsvector('english', content) @@ plainto_tsquery('english', ${searchTerm})
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    // Get full message details with relations
+    const messageIds = messages.map((m) => m.id);
+
+    if (messageIds.length === 0) {
+      return { messages: [], total: 0, query: searchTerm };
+    }
+
+    const fullMessages = await this.prisma.message.findMany({
+      where: {
+        id: { in: messageIds },
+      },
+      include: {
+        ...this.messageInclude,
+        reactions: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Get total count
+    const totalResult = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*) as count
+      FROM messages
+      WHERE conversation_id = ${conversationId}
+        AND is_deleted = false
+        AND content IS NOT NULL
+        AND to_tsvector('english', content) @@ plainto_tsquery('english', ${searchTerm})
+    `;
+
+    const total = Number(totalResult[0]?.count || 0);
+
+    return {
+      messages: fullMessages,
+      total,
+      query: searchTerm,
+    };
   }
 
   // ============================================

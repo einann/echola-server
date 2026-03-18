@@ -42,6 +42,8 @@ import { RedisConversationEvent } from '../redis/types/redis-data.types';
 import { AllWsExceptionsFilter } from '../common/filters/ws-exception.filter';
 import { EnvironmentVariables } from 'src/config/env.validation';
 import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
+import { ForwardMessageEvent } from 'src/messages/dto/forward-message.dto';
+import { SearchMessagesEvent } from 'src/messages/dto/search-messages.dto';
 
 @WebSocketGateway({
   namespace: '/chat',
@@ -50,7 +52,7 @@ import { DeleteMessageDto } from 'src/messages/dto/delete-message.dto';
 @UseFilters(new AllWsExceptionsFilter())
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   @WebSocketServer()
-  server: Server;
+  server?: Server;
 
   constructor(
     private readonly logger: Logger,
@@ -172,6 +174,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect, On
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return this.messagesHandler.deleteMessage(client, data);
+  }
+
+  // Forward message
+  @SubscribeMessage('message:forward')
+  async handleForwardMessage(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: ForwardMessageEvent,
+  ) {
+    return this.messagesHandler.forwardMessage(client, data);
+  }
+
+  // Search messages
+  @SubscribeMessage('message:search')
+  async handleSearchMessages(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: SearchMessagesEvent,
+  ) {
+    return this.messagesHandler.searchMessages(client, data);
   }
 
   // Typing
