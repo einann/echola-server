@@ -5,10 +5,37 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
+
+type ReactionUserSelect = {
+  id: string;
+  displayName: string | null;
+  username: string | null;
+  avatarKey: string | null;
+};
 
 @Injectable()
 export class ReactionsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private storageService: StorageService,
+  ) {}
+
+  private readonly reactionUserSelect = {
+    id: true,
+    displayName: true,
+    username: true,
+    avatarKey: true,
+  } as const;
+
+  private async enrichReactionUser(user: ReactionUserSelect) {
+    const { avatarKey, ...rest } = user;
+    return { ...rest, avatarUrl: await this.storageService.getAvatarUrl(avatarKey) };
+  }
+
+  private async enrichReaction<R extends { user: ReactionUserSelect }>(reaction: R): Promise<R> {
+    return { ...reaction, user: await this.enrichReactionUser(reaction.user) } as unknown as R;
+  }
 
   async addReaction(userId: string, messageId: string, emoji: string) {
     // Verify message exists
@@ -67,14 +94,7 @@ export class ReactionsService {
         emoji,
       },
       include: {
-        user: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
+        user: { select: this.reactionUserSelect },
         message: {
           select: {
             id: true,
@@ -85,7 +105,7 @@ export class ReactionsService {
       },
     });
 
-    return reaction;
+    return this.enrichReaction(reaction);
   }
 
   async removeReaction(userId: string, messageId: string, emoji: string) {
@@ -132,20 +152,15 @@ export class ReactionsService {
     const reactions = await this.prisma.messageReaction.findMany({
       where: { messageId },
       include: {
-        user: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
+        user: { select: this.reactionUserSelect },
       },
       orderBy: { createdAt: 'asc' },
     });
 
+    const enrichedReactions = await Promise.all(reactions.map((r) => this.enrichReaction(r)));
+
     // Group reactions by emoji
-    const groupedReactions = reactions.reduce(
+    const groupedReactions = enrichedReactions.reduce(
       (acc, reaction) => {
         const emoji = reaction.emoji;
         if (!acc[emoji]) {
@@ -170,17 +185,10 @@ export class ReactionsService {
   }
 
   private async getReactionWithUser(reactionId: string) {
-    return await this.prisma.messageReaction.findUnique({
+    const reaction = await this.prisma.messageReaction.findUnique({
       where: { id: reactionId },
       include: {
-        user: {
-          select: {
-            id: true,
-            displayName: true,
-            username: true,
-            avatarUrl: true,
-          },
-        },
+        user: { select: this.reactionUserSelect },
         message: {
           select: {
             id: true,
@@ -190,5 +198,8 @@ export class ReactionsService {
         },
       },
     });
+
+    if (!reaction) return null;
+    return this.enrichReaction(reaction);
   }
 }

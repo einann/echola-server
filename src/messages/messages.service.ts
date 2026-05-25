@@ -38,7 +38,7 @@ export class MessagesService {
         id: true,
         displayName: true,
         username: true,
-        avatarUrl: true,
+        avatarKey: true,
       },
     },
     statuses: {
@@ -65,6 +65,20 @@ export class MessagesService {
     },
     attachments: true,
   };
+
+  private async enrichMessage<M extends { sender: { avatarKey: string | null } }>(
+    message: M,
+  ): Promise<M> {
+    const { avatarKey, ...senderRest } = message.sender;
+    const avatarUrl = await this.storageService.getAvatarUrl(avatarKey);
+    return { ...message, sender: { ...senderRest, avatarUrl } } as unknown as M;
+  }
+
+  private enrichMessages<M extends { sender: { avatarKey: string | null } }>(
+    messages: M[],
+  ): Promise<M[]> {
+    return Promise.all(messages.map((m) => this.enrichMessage(m)));
+  }
 
   // ============================================
   // SEND TEXT MESSAGE
@@ -110,7 +124,7 @@ export class MessagesService {
     // Update conversation timestamp
     await this.touchConversation(conversationId);
 
-    return message;
+    return this.enrichMessage(message);
   }
 
   // ============================================
@@ -180,7 +194,7 @@ export class MessagesService {
       'Media message created',
     );
 
-    return message;
+    return this.enrichMessage(message);
   }
 
   // ============================================
@@ -216,7 +230,8 @@ export class MessagesService {
       },
     });
 
-    return messages.reverse();
+    const enriched = await this.enrichMessages(messages);
+    return enriched.reverse();
   }
 
   async getMessageById(messageId: string) {
@@ -232,7 +247,7 @@ export class MessagesService {
       throw new NotFoundException('Message not found');
     }
 
-    return message;
+    return this.enrichMessage(message);
   }
 
   // ============================================
@@ -343,7 +358,7 @@ export class MessagesService {
       throw new BadRequestException('This message type cannot be edited');
     }
 
-    return this.prisma.message.update({
+    const updated = await this.prisma.message.update({
       where: { id: messageId },
       data: {
         content: newContent.trim(),
@@ -352,6 +367,8 @@ export class MessagesService {
       },
       include: this.messageInclude,
     });
+
+    return this.enrichMessage(updated);
   }
 
   // ============================================
@@ -546,7 +563,15 @@ export class MessagesService {
     const forwardedFromUserId = originalMessage.forwardedFromUserId || originalMessage.senderId;
     const forwardedFromMessageId = originalMessage.forwardedFromMessageId || originalMessage.id;
 
-    const forwardedMessages: Message[] = [];
+    type ForwardedMessage = Message & {
+      sender: {
+        id: string;
+        displayName: string | null;
+        username: string | null;
+        avatarKey: string | null;
+      };
+    };
+    const forwardedMessages: ForwardedMessage[] = [];
 
     // Create forwarded message in each target conversation
     for (const targetConversationId of dto.targetConversationIds) {
@@ -606,7 +631,7 @@ export class MessagesService {
       'Message forwarded',
     );
 
-    return forwardedMessages;
+    return this.enrichMessages(forwardedMessages);
   }
 
   // ============================================
@@ -693,7 +718,7 @@ export class MessagesService {
     const total = Number(totalResult[0]?.count || 0);
 
     return {
-      messages: fullMessages,
+      messages: await this.enrichMessages(fullMessages),
       total,
       query: searchTerm,
     };

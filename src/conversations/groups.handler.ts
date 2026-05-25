@@ -4,6 +4,7 @@ import { GroupManagementService } from './group-management.service';
 import { RedisService } from '../redis/redis.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocketService } from '../socket/socket.service';
+import { StorageService } from '../storage/storage.service';
 import {
   AddMembersDto,
   LeaveGroupDto,
@@ -19,6 +20,7 @@ export class GroupsHandler {
     private redisService: RedisService,
     private prismaService: PrismaService,
     private socketService: SocketService,
+    private storageService: StorageService,
   ) {}
 
   async addMembers(client: AuthenticatedSocket, data: AddMembersDto): Promise<void> {
@@ -119,14 +121,23 @@ export class GroupsHandler {
         id: true,
         displayName: true,
         username: true,
-        avatarUrl: true,
+        avatarKey: true,
       },
     });
+
+    const enrichedUser = user
+      ? {
+          id: user.id,
+          displayName: user.displayName,
+          username: user.username,
+          avatarUrl: await this.storageService.getAvatarUrl(user.avatarKey),
+        }
+      : null;
 
     // Notify remaining members
     this.socketService.emitToConversation(data.conversationId, 'group:member:left', {
       conversationId: data.conversationId,
-      user,
+      user: enrichedUser,
       leftVoluntarily: true,
     });
 

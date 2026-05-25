@@ -101,6 +101,16 @@ export class StorageService {
   }
 
   /**
+   * Avatar key'inden signed URL üretir. Key null ise null döner.
+   * Avatar'lar MEDIA bucket'ında tutulur. Signed URL kısa ömürlüdür,
+   * stable olan key'dir; her okumada yeni URL üretilir.
+   */
+  async getAvatarUrl(avatarKey: string | null | undefined): Promise<string | null> {
+    if (!avatarKey) return null;
+    return this.generatePresignedDownloadUrl(StorageBucket.MEDIA, avatarKey, 3600);
+  }
+
+  /**
    * Buffer'dan dosya yükler (işlenmiş medyalar için)
    */
   async uploadBuffer(

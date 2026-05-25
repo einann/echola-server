@@ -10,6 +10,17 @@ import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ConversationType } from 'generated/prisma/client';
 import { EnvironmentVariables } from '../config/env.validation';
 import { SocketService } from '../socket/socket.service';
+import { StorageService } from '../storage/storage.service';
+
+type ParticipantUserSelect = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  username: string | null;
+  avatarKey: string | null;
+  isOnline: boolean;
+  lastSeenAt: Date | null;
+};
 
 @Injectable()
 export class ConversationsService {
@@ -17,7 +28,38 @@ export class ConversationsService {
     private prisma: PrismaService,
     private configService: ConfigService<EnvironmentVariables>,
     private socketService: SocketService,
+    private storageService: StorageService,
   ) {}
+
+  private readonly participantUserSelect = {
+    id: true,
+    email: true,
+    displayName: true,
+    username: true,
+    avatarKey: true,
+    isOnline: true,
+    lastSeenAt: true,
+  } as const;
+
+  private async enrichUser<T extends { avatarKey: string | null }>(
+    user: T,
+  ): Promise<Omit<T, 'avatarKey'> & { avatarUrl: string | null }> {
+    const { avatarKey, ...rest } = user;
+    return { ...rest, avatarUrl: await this.storageService.getAvatarUrl(avatarKey) };
+  }
+
+  private async enrichParticipants<
+    P extends { user: ParticipantUserSelect },
+    C extends { participants: P[] },
+  >(conversation: C): Promise<C> {
+    const enriched = await Promise.all(
+      conversation.participants.map(async (p) => ({
+        ...p,
+        user: await this.enrichUser(p.user),
+      })),
+    );
+    return { ...conversation, participants: enriched } as unknown as C;
+  }
 
   // ============================================
   // Helper Methods
@@ -113,31 +155,23 @@ export class ConversationsService {
       include: {
         participants: {
           include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                displayName: true,
-                username: true,
-                avatarUrl: true,
-                isOnline: true,
-                lastSeenAt: true,
-              },
-            },
+            user: { select: this.participantUserSelect },
           },
         },
       },
     });
 
+    const enriched = await this.enrichParticipants(conversation);
+
     // Emit WebSocket event to all participants
     const allParticipantIds = [userId, ...participantIds];
     allParticipantIds.forEach((participantId) => {
       this.socketService.emitToUser(participantId, 'conversation:created', {
-        conversation,
+        conversation: enriched,
       });
     });
 
-    return conversation;
+    return enriched;
   }
 
   async getUserConversations(
@@ -255,17 +289,7 @@ export class ConversationsService {
             participants: {
               where: { leftAt: null },
               include: {
-                user: {
-                  select: {
-                    id: true,
-                    email: true,
-                    displayName: true,
-                    username: true,
-                    avatarUrl: true,
-                    isOnline: true,
-                    lastSeenAt: true,
-                  },
-                },
+                user: { select: this.participantUserSelect },
               },
             },
             messages: {
@@ -313,18 +337,21 @@ export class ConversationsService {
     // Calculate unread counts for all conversations
     const conversationsWithUnread = await Promise.all(
       items.map(async (p) => {
-        const unreadCount = await this.prisma.message.count({
-          where: {
-            conversationId: p.conversation.id,
-            senderId: { not: userId },
-            createdAt: p.lastReadAt ? { gt: p.lastReadAt } : undefined, // If never read, count all messages from others
-            isDeleted: false,
-          },
-        });
+        const [unreadCount, enrichedConversation] = await Promise.all([
+          this.prisma.message.count({
+            where: {
+              conversationId: p.conversation.id,
+              senderId: { not: userId },
+              createdAt: p.lastReadAt ? { gt: p.lastReadAt } : undefined, // If never read, count all messages from others
+              isDeleted: false,
+            },
+          }),
+          this.enrichParticipants(p.conversation),
+        ]);
 
         return {
-          ...p.conversation,
-          lastMessage: p.conversation.messages[0] || null,
+          ...enrichedConversation,
+          lastMessage: enrichedConversation.messages[0] || null,
           unreadCount,
           isPinned: p.isPinned,
           pinnedAt: p.pinnedAt,
@@ -361,17 +388,7 @@ export class ConversationsService {
         participants: {
           where: { leftAt: null },
           include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                displayName: true,
-                username: true,
-                avatarUrl: true,
-                isOnline: true,
-                lastSeenAt: true,
-              },
-            },
+            user: { select: this.participantUserSelect },
           },
         },
       },
@@ -381,7 +398,7 @@ export class ConversationsService {
       throw new NotFoundException('Conversation not found');
     }
 
-    return conversation;
+    return this.enrichParticipants(conversation);
   }
 
   private async findDirectConversation(user1Id: string, user2Id: string) {
@@ -402,17 +419,7 @@ export class ConversationsService {
             leftAt: null,
           },
           include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                displayName: true,
-                username: true,
-                avatarUrl: true,
-                isOnline: true,
-                lastSeenAt: true,
-              },
-            },
+            user: { select: this.participantUserSelect },
           },
         },
       },
@@ -426,7 +433,8 @@ export class ConversationsService {
       return participantIds.includes(user1Id) && participantIds.includes(user2Id);
     });
 
-    return existingConversation || null;
+    if (!existingConversation) return null;
+    return this.enrichParticipants(existingConversation);
   }
 
   // ============================================

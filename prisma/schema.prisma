@@ -50,7 +50,7 @@ model User {
   displayName String?  @map("display_name")
   username    String?  @unique
   bio         String?
-  avatarUrl   String?  @map("avatar_url")
+  avatarKey   String?  @map("avatar_key")
   
   // Status and presence
   statusMessage String?  @map("status_message")

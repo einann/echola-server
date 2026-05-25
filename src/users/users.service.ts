@@ -33,6 +33,31 @@ export class UsersService {
     private emailService: EmailService,
   ) {}
 
+  private readonly profileSelect = {
+    id: true,
+    email: true,
+    displayName: true,
+    username: true,
+    bio: true,
+    avatarKey: true,
+    statusMessage: true,
+    isOnline: true,
+    lastSeenAt: true,
+    emailVerified: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
+
+  private async toProfileResponse(
+    user: { avatarKey: string | null } & Omit<UserProfileResponseDto, 'avatarUrl'>,
+  ): Promise<UserProfileResponseDto> {
+    const { avatarKey, ...rest } = user;
+    return {
+      ...rest,
+      avatarUrl: await this.storageService.getAvatarUrl(avatarKey),
+    };
+  }
+
   // ========================================
   // Profile Management
   // ========================================
@@ -40,27 +65,14 @@ export class UsersService {
   async getUserProfile(userId: string): Promise<UserProfileResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        username: true,
-        bio: true,
-        avatarUrl: true,
-        statusMessage: true,
-        isOnline: true,
-        lastSeenAt: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: this.profileSelect,
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    return user;
+    return this.toProfileResponse(user);
   }
 
   async updateUserProfile(
@@ -84,23 +96,10 @@ export class UsersService {
     const user = await this.prisma.user.update({
       where: { id: userId },
       data: updateData,
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        username: true,
-        bio: true,
-        avatarUrl: true,
-        statusMessage: true,
-        isOnline: true,
-        lastSeenAt: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: this.profileSelect,
     });
 
-    return user;
+    return this.toProfileResponse(user);
   }
 
   async changePassword(
@@ -170,50 +169,24 @@ export class UsersService {
     userId: string,
     dto: ConfirmAvatarUploadDto,
   ): Promise<UserProfileResponseDto> {
-    // Get old avatar URL to delete if exists
-    const user = await this.prisma.user.findUnique({
+    const existing = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { avatarUrl: true },
+      select: { avatarKey: true },
     });
 
-    // Generate permanent download URL
-    const avatarUrl = await this.storageService.generatePresignedDownloadUrl(
-      StorageBucket.MEDIA,
-      dto.fileKey,
-      7 * 24 * 60 * 60, // 7 days
-    );
-
-    // Update user with new avatar
-    const updatedUser = await this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { avatarUrl },
-      select: {
-        id: true,
-        email: true,
-        displayName: true,
-        username: true,
-        bio: true,
-        avatarUrl: true,
-        statusMessage: true,
-        isOnline: true,
-        lastSeenAt: true,
-        emailVerified: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      data: { avatarKey: dto.fileKey },
+      select: this.profileSelect,
     });
 
-    // Delete old avatar from storage if exists
-    if (user?.avatarUrl) {
-      try {
-        // Extract fileKey from old URL (implementation depends on URL structure)
-        // await this.storageService.delete(StorageBucket.MEDIA, oldFileKey);
-      } catch (error) {
-        // Log but don't throw - avatar update was successful
-      }
+    if (existing?.avatarKey && existing.avatarKey !== dto.fileKey) {
+      await this.storageService
+        .delete(StorageBucket.MEDIA, existing.avatarKey)
+        .catch(() => undefined);
     }
 
-    return updatedUser;
+    return this.toProfileResponse(updated);
   }
 
   // ========================================
@@ -241,7 +214,7 @@ export class UsersService {
           id: true,
           username: true,
           displayName: true,
-          avatarUrl: true,
+          avatarKey: true,
           bio: true,
         },
         take: limit,
@@ -264,8 +237,15 @@ export class UsersService {
       }),
     ]);
 
+    const enrichedUsers = await Promise.all(
+      users.map(async ({ avatarKey, ...rest }) => ({
+        ...rest,
+        avatarUrl: await this.storageService.getAvatarUrl(avatarKey),
+      })),
+    );
+
     return {
-      users,
+      users: enrichedUsers,
       total,
       limit,
       offset,
@@ -541,7 +521,7 @@ export class UsersService {
             id: true,
             displayName: true,
             username: true,
-            avatarUrl: true,
+            avatarKey: true,
             email: true,
           },
         },
@@ -551,11 +531,19 @@ export class UsersService {
       },
     });
 
+    const enriched = await Promise.all(
+      blockedUsers.map(async (block) => {
+        const { avatarKey, ...rest } = block.blocked;
+        return {
+          ...rest,
+          avatarUrl: await this.storageService.getAvatarUrl(avatarKey),
+          blockedAt: block.createdAt,
+        };
+      }),
+    );
+
     return {
-      blockedUsers: blockedUsers.map((block) => ({
-        ...block.blocked,
-        blockedAt: block.createdAt,
-      })),
+      blockedUsers: enriched,
       total: blockedUsers.length,
     };
   }

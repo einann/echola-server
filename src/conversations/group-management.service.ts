@@ -9,13 +9,22 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConversationParticipant, ConversationType } from 'generated/prisma/client';
 import { EnvironmentVariables } from '../config/env.validation';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class GroupManagementService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService<EnvironmentVariables>,
+    private storageService: StorageService,
   ) {}
+
+  private async withAvatarUrl<T extends { avatarKey: string | null }>(
+    user: T,
+  ): Promise<Omit<T, 'avatarKey'> & { avatarUrl: string | null }> {
+    const { avatarKey, ...rest } = user;
+    return { ...rest, avatarUrl: await this.storageService.getAvatarUrl(avatarKey) };
+  }
 
   // ============================================
   // Helper Methods
@@ -168,9 +177,19 @@ export class GroupManagementService {
     const previousUserIds = previousParticipants.map((p) => p.userId);
     const newUserIds = userIds.filter((id) => !previousUserIds.includes(id));
 
+    type ParticipantWithUser = ConversationParticipant & {
+      user: {
+        id: string;
+        displayName: string | null;
+        username: string | null;
+        avatarKey: string | null;
+        email: string;
+      };
+    };
+
     // Perform operations in transaction
     const newParticipants = await this.prisma.$transaction(async (tx) => {
-      const results: ConversationParticipant[] = [];
+      const results: ParticipantWithUser[] = [];
 
       // Re-add users who previously left (update leftAt to null and joinedAt to now)
       if (previousUserIds.length > 0) {
@@ -198,7 +217,7 @@ export class GroupManagementService {
                 id: true,
                 displayName: true,
                 username: true,
-                avatarUrl: true,
+                avatarKey: true,
                 email: true,
               },
             },
@@ -224,7 +243,7 @@ export class GroupManagementService {
                     id: true,
                     displayName: true,
                     username: true,
-                    avatarUrl: true,
+                    avatarKey: true,
                     email: true,
                   },
                 },
@@ -249,11 +268,13 @@ export class GroupManagementService {
       },
     });
 
+    const addedMembers = await Promise.all(
+      newParticipants.map((p) => this.withAvatarUrl(p.user)),
+    );
+
     return {
       conversation,
-      // @ts-expect-error 'TODO'
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-      addedMembers: newParticipants.map((p) => p.user),
+      addedMembers,
       addedBy: adminId,
     };
   }
@@ -290,7 +311,7 @@ export class GroupManagementService {
             id: true,
             displayName: true,
             username: true,
-            avatarUrl: true,
+            avatarKey: true,
           },
         },
       },
@@ -308,7 +329,7 @@ export class GroupManagementService {
 
     return {
       conversationId,
-      removedUser: participant.user,
+      removedUser: await this.withAvatarUrl(participant.user),
       removedBy: adminId,
     };
   }
@@ -396,7 +417,7 @@ export class GroupManagementService {
             id: true,
             displayName: true,
             username: true,
-            avatarUrl: true,
+            avatarKey: true,
           },
         },
       },
@@ -424,7 +445,7 @@ export class GroupManagementService {
             id: true,
             displayName: true,
             username: true,
-            avatarUrl: true,
+            avatarKey: true,
           },
         },
       },
@@ -432,7 +453,7 @@ export class GroupManagementService {
 
     return {
       conversationId,
-      user: updatedParticipant.user,
+      user: await this.withAvatarUrl(updatedParticipant.user),
       newRole,
       updatedBy: adminId,
     };
@@ -472,7 +493,7 @@ export class GroupManagementService {
                 id: true,
                 displayName: true,
                 username: true,
-                avatarUrl: true,
+                avatarKey: true,
               },
             },
           },
@@ -480,8 +501,15 @@ export class GroupManagementService {
       },
     });
 
+    const enrichedParticipants = await Promise.all(
+      updatedConversation.participants.map(async (p) => ({
+        ...p,
+        user: await this.withAvatarUrl(p.user),
+      })),
+    );
+
     return {
-      conversation: updatedConversation,
+      conversation: { ...updatedConversation, participants: enrichedParticipants },
       updatedBy: adminId,
     };
   }
@@ -505,7 +533,7 @@ export class GroupManagementService {
             id: true,
             displayName: true,
             username: true,
-            avatarUrl: true,
+            avatarKey: true,
             isOnline: true,
             lastSeenAt: true,
           },
@@ -526,13 +554,17 @@ export class GroupManagementService {
       },
     });
 
-    return {
-      conversation,
-      members: participants.map((p) => ({
-        ...p.user,
+    const members = await Promise.all(
+      participants.map(async (p) => ({
+        ...(await this.withAvatarUrl(p.user)),
         role: p.role,
         joinedAt: p.joinedAt,
       })),
+    );
+
+    return {
+      conversation,
+      members,
       totalMembers: participants.length,
     };
   }
