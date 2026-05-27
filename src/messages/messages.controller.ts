@@ -72,7 +72,7 @@ export class MessagesController {
     @Param('messageId') messageId: string,
     @Body() dto: DeleteMessageDto,
   ) {
-    return this.messagesService.deleteMessage(messageId, req.user.id, dto.deleteForEveryone);
+    return this.messagesService.deleteMessage(messageId, req.user.userId, dto.deleteForEveryone);
   }
 
   @Get('conversation/:conversationId/unread-count')
