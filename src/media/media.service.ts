@@ -1,6 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { FileTypeResult } from 'file-type';
+
+// file-type is ESM-only. TypeScript with `module: commonjs` would otherwise
+// rewrite `await import('file-type')` into a require() call and crash at
+// runtime with ERR_REQUIRE_ESM. Using `new Function` keeps the import native.
+const dynamicImport = new Function('m', 'return import(m)') as <T = unknown>(
+  m: string,
+) => Promise<T>;
 import { StorageService } from '../storage/storage.service';
 import { StorageBucket } from '../storage/enums';
 import { ImageProcessor, VideoProcessor, AudioProcessor } from './processors';
@@ -8,6 +16,30 @@ import { MediaType } from './enums';
 import { ProcessedMedia } from './interfaces';
 import { MediaUploadRequestDto, MediaUploadConfirmDto } from './dto';
 import { PresignedUrlResult, UploadResult } from '../storage/interfaces';
+
+const ALLOWED_MIMES_PER_TYPE: Record<MediaType, ReadonlySet<string>> = {
+  [MediaType.IMAGE]: new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
+  [MediaType.VIDEO]: new Set(['video/mp4', 'video/quicktime', 'video/webm']),
+  [MediaType.AUDIO]: new Set([
+    'audio/mpeg',
+    'audio/mp4',
+    'audio/x-m4a',
+    'audio/webm',
+    'audio/ogg',
+    'audio/wav',
+    'audio/x-wav',
+  ]),
+  [MediaType.DOCUMENT]: new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/zip',
+  ]),
+};
 
 @Injectable()
 export class MediaService {
@@ -35,19 +67,43 @@ export class MediaService {
    * Yüklenen dosyayı işler ve kalıcı storage'a taşır
    */
   async confirmUpload(dto: MediaUploadConfirmDto): Promise<ProcessedMedia> {
-    // 1. Temp'ten dosyayı al
-    const buffer = await this.storageService.getBuffer(StorageBucket.TEMP, dto.fileKey);
+    try {
+      const buffer = await this.storageService.getBuffer(StorageBucket.TEMP, dto.fileKey);
 
-    // 2. Media tipine göre işle
-    const processed = await this.processMedia(buffer, dto.mediaType, dto.mimeType);
+      // Magic-byte ile gerçek mime'ı doğrula. Client'ın beyan ettiği mime'a
+      // güvenmiyoruz — saldırgan .jpg etiketiyle binary yüklemeyi denemiş olabilir.
+      const detectedMime = await this.validateFileType(buffer, dto.mediaType);
 
-    // 3. İşlenmiş dosyaları yükle
-    const result = await this.uploadProcessedMedia(processed, dto.conversationId, dto.mediaType);
+      const processed = await this.processMedia(buffer, dto.mediaType, detectedMime);
+      return await this.uploadProcessedMedia(processed, dto.conversationId, dto.mediaType);
+    } finally {
+      // Validation/processing başarısız olsa bile temp dosya çöp olarak kalmasın.
+      await this.storageService.delete(StorageBucket.TEMP, dto.fileKey).catch(() => undefined);
+    }
+  }
 
-    // 4. Temp dosyayı sil
-    await this.storageService.delete(StorageBucket.TEMP, dto.fileKey);
+  /**
+   * Buffer'ın gerçek mime tipini magic-byte ile tespit eder ve beyan edilen
+   * mediaType ile uyumlu olup olmadığını kontrol eder. Uyumsuzsa atar.
+   */
+  private async validateFileType(buffer: Buffer, mediaType: MediaType): Promise<string> {
+    const { fileTypeFromBuffer } = await dynamicImport<{
+      fileTypeFromBuffer: (b: Buffer) => Promise<FileTypeResult | undefined>;
+    }>('file-type');
+    const detected = await fileTypeFromBuffer(buffer);
 
-    return result;
+    if (!detected) {
+      throw new BadRequestException('Could not determine file type from contents');
+    }
+
+    const allowed = ALLOWED_MIMES_PER_TYPE[mediaType];
+    if (!allowed.has(detected.mime)) {
+      throw new BadRequestException(
+        `File content (${detected.mime}) does not match expected ${mediaType.toLowerCase()} type`,
+      );
+    }
+
+    return detected.mime;
   }
 
   /**
