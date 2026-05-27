@@ -42,7 +42,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     PresenceModule,
     PrismaModule,
     RedisModule,
-    StorageModule,
+    StorageModule.forRoot(),
     SocketModule,
     UsersModule,
     MetricsModule,

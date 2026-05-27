@@ -14,7 +14,8 @@ import { StorageService } from './storage.service';
 import { StorageBucket } from './enums';
 import { JwtAccessGuard } from 'src/auth/guards/jwt-access.guard';
 
-// Only for development/testing - remove in production!
+// Dev-only controller. Registered conditionally in StorageModule.forRoot()
+// when NODE_ENV !== 'production'. Used for Postman testing of storage flows.
 @Controller('storage')
 @UseGuards(JwtAccessGuard)
 export class StorageController {
