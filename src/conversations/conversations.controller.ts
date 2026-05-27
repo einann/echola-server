@@ -12,12 +12,15 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ConversationsService } from './conversations.service';
 import { GroupManagementService } from './group-management.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { PaginationQueryDto } from './dto/pagination.dto';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 
+@ApiTags('Conversations')
+@ApiBearerAuth('access-token')
 @Controller('conversations')
 @UseGuards(JwtAccessGuard)
 export class ConversationsController {

@@ -10,12 +10,15 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { StorageService } from './storage.service';
 import { StorageBucket } from './enums';
 import { JwtAccessGuard } from 'src/auth/guards/jwt-access.guard';
 
 // Dev-only controller. Registered conditionally in StorageModule.forRoot()
 // when NODE_ENV !== 'production'. Used for Postman testing of storage flows.
+@ApiTags('Storage')
+@ApiBearerAuth('access-token')
 @Controller('storage')
 @UseGuards(JwtAccessGuard)
 export class StorageController {

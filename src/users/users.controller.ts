@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAccessGuard } from 'src/auth/guards/jwt-access.guard';
 import { UsersService } from './users.service';
 import {
@@ -26,6 +27,8 @@ import {
   ResetPasswordDto,
 } from './dto';
 
+@ApiTags('Users')
+@ApiBearerAuth('access-token')
 @Controller('users')
 export class UsersController {
   constructor(private usersService: UsersService) {}

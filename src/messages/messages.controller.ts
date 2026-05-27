@@ -10,12 +10,15 @@ import {
   Request,
   Query,
 } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { MessagesService } from './messages.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { DeleteMessageDto } from './dto/delete-message.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ForwardMessageDto } from './dto/forward-message.dto';
 
+@ApiTags('Messages')
+@ApiBearerAuth('access-token')
 @Controller('messages')
 @UseGuards(JwtAccessGuard)
 export class MessagesController {

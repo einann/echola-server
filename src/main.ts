@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
@@ -70,6 +71,48 @@ async function bootstrap() {
   });
 
   // ================================
+  // SWAGGER (production'da kapalı — API yüzeyini gereksiz yere ifşa etmemek için)
+  // ================================
+  if (configService.get<string>('NODE_ENV') !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Echola API')
+      .setDescription(
+        'Echola gerçek zamanlı mesajlaşma backend API\'si. ' +
+          'WebSocket (`/chat` namespace) ve REST endpoint\'leri içerir. ' +
+          'Korumalı endpoint\'ler için Authorize butonundan JWT access token girin.',
+      )
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT access token (login/register response\'undan alınır)',
+        },
+        'access-token',
+      )
+      .addTag('Auth', 'Kayıt, giriş, refresh token, logout')
+      .addTag('Users', 'Profil, avatar, arama, block/unblock')
+      .addTag('Conversations', 'Direct ve group konuşmaları, archive/pin/mute')
+      .addTag('Messages', 'Mesaj gönderme, düzenleme, silme, forward, search')
+      .addTag('Media', 'Medya yükleme (presigned URL), confirm')
+      .addTag('Notifications', 'FCM token yönetimi')
+      .addTag('Storage', 'Storage testleri (dev-only)')
+      .addTag('Health', 'Liveness/readiness probe\'ları')
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+      },
+      customSiteTitle: 'Echola API Docs',
+    });
+  }
+
+  // ================================
   // WEBSOCKET ADAPTER
   // ================================
   const redisIoAdapter = new RedisIoAdapter(app, configService);
@@ -118,6 +161,9 @@ async function bootstrap() {
 
   logger.log(`Echola backend is running on: http://localhost:${port}`);
   logger.log(`WebSocket server is running on: ws://localhost:${port}/chat`);
+  if (configService.get<string>('NODE_ENV') !== 'production') {
+    logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
+  }
   logger.log(`Environment: ${configService.get('NODE_ENV')}`);
 }
 

@@ -1,8 +1,11 @@
 import { Controller, Post, Delete, Body, UseGuards, Request } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { NotificationsService } from './notifications.service';
 import { JwtAccessGuard } from '../auth/guards/jwt-access.guard';
 import { RegisterFcmTokenDto } from './dto/register-token.dto';
 
+@ApiTags('Notifications')
+@ApiBearerAuth('access-token')
 @Controller('notifications')
 @UseGuards(JwtAccessGuard)
 export class NotificationsController {

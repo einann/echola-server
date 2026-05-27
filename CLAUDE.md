@@ -397,6 +397,17 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push/PR to `main` a
 - **Trust Proxy**: Enabled for rate limiting behind load balancers
 - **Graceful Shutdown**: 15-second timeout for clean shutdown
 
+## API Documentation (Swagger)
+
+OpenAPI dokümanı `@nestjs/swagger` ile üretilir ve **sadece non-production** ortamlarda servis edilir (production'da API yüzeyini gereksiz ifşa etmemek için).
+
+- URL: `http://localhost:<PORT>/api/docs`
+- Bearer auth scheme: `access-token` (Authorize butonundan login response'undaki access token girilir; `persistAuthorization` açık olduğu için sekme yenilense bile saklanır)
+- DTO'lar için manuel `@ApiProperty` gerekli değil — `nest-cli.json`'da Swagger CLI plugin'i etkin (`introspectComments: true`, `classValidatorShim: true`) class-validator dekoratörlerinden otomatik üretiyor
+- Tag düzeni: Auth, Users, Conversations, Messages, Media, Notifications, Storage, Health
+- Yeni controller eklerken: `@ApiTags('<tag>')` ve protected ise `@ApiBearerAuth('access-token')` dekoratörlerini ekle. Endpoint başlıkları için `@ApiOperation({ summary })` kullan
+- WebSocket eventleri Swagger'da görünmez — bu doc sadece REST içindir
+
 # When implementing a new library or framework, or adding a feature that uses them, check the latest documentation using context7.
 
 # Whenever you update prisma schema or add new modules or update environment variables, update this file.
