@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,11 +7,13 @@ import * as bcrypt from 'bcrypt';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { User } from 'generated/prisma/client';
+import { User, Prisma } from 'generated/prisma/client';
 import { EnvironmentVariables } from 'src/config/env.validation';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -137,34 +139,63 @@ export class AuthService {
   async refreshTokens(refreshTokenDto: RefreshTokenDto) {
     const { refreshToken, deviceId } = refreshTokenDto;
 
-    // Verify refresh token exists in database
-    const storedToken = await this.prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
-      include: { user: true, device: true },
-    });
-
-    if (!storedToken) {
+    // Step 1: verify JWT signature & expiry. Decoding the payload here also
+    // gives us a trusted userId/deviceId to use for reuse-detection cleanup,
+    // even when the token is no longer in the DB.
+    let payload: { sub: string; deviceId: string };
+    try {
+      payload = await this.jwtService.verifyAsync<{ sub: string; deviceId: string }>(
+        refreshToken,
+        { secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }) },
+      );
+    } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    // Check if token expired
-    if (storedToken.expiresAt < new Date()) {
-      await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
-      throw new UnauthorizedException('Refresh token expired');
-    }
-
-    // Verify device matches
-    if (storedToken.device.deviceId !== deviceId) {
+    if (payload.deviceId !== deviceId) {
       throw new UnauthorizedException('Device mismatch');
     }
 
-    // Delete old refresh token
-    await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+    // Step 2: rotate inside a transaction so concurrent refreshes can't both
+    // succeed with the same token.
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const storedToken = await tx.refreshToken.findUnique({
+          where: { token: refreshToken },
+          include: { device: true },
+        });
 
-    // Generate new tokens
-    const tokens = await this.generateTokens(storedToken.userId, deviceId);
+        // Reuse detection: JWT is valid but token is no longer in the DB,
+        // meaning it was already rotated. Treat as a replay attack and revoke
+        // the entire device family so both the attacker and the legit user
+        // are forced to re-authenticate.
+        if (!storedToken) {
+          this.logger.warn(
+            `Refresh token reuse detected for user=${payload.sub} device=${payload.deviceId}; revoking all device tokens`,
+          );
+          await tx.refreshToken.deleteMany({
+            where: { userId: payload.sub, device: { deviceId: payload.deviceId } },
+          });
+          throw new UnauthorizedException('Refresh token reuse detected');
+        }
 
-    return tokens;
+        if (storedToken.expiresAt < new Date()) {
+          await tx.refreshToken.delete({ where: { id: storedToken.id } });
+          throw new UnauthorizedException('Refresh token expired');
+        }
+
+        if (storedToken.device.deviceId !== deviceId || storedToken.userId !== payload.sub) {
+          throw new UnauthorizedException('Device mismatch');
+        }
+
+        await tx.refreshToken.delete({ where: { id: storedToken.id } });
+
+        return this.generateTokens(storedToken.userId, deviceId, tx);
+      });
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 
   async logout(userId: string, deviceId: string) {
@@ -201,47 +232,46 @@ export class AuthService {
     return { message: 'Logged out from all devices' };
   }
 
-  private async generateTokens(userId: string, deviceId: string) {
+  private async generateTokens(
+    userId: string,
+    deviceId: string,
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
     const payload = { sub: userId, deviceId };
 
-    // Generate access token (short-lived)
     const accessToken = this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_ACCESS_SECRET', { infer: true }),
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION', {
-        infer: true,
-      }),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION', { infer: true }),
     });
 
-    // Generate refresh token (long-lived)
     const refreshToken = this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
-      expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION', {
-        infer: true,
-      }),
+      expiresIn: this.configService.get('JWT_REFRESH_EXPIRATION', { infer: true }),
     });
 
-    // Store refresh token in database
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
 
-    await this.prisma.refreshToken.create({
+    const device = await client.device.findUnique({ where: { deviceId } });
+    if (!device) {
+      throw new UnauthorizedException('Device not found');
+    }
+
+    await client.refreshToken.create({
       data: {
         userId,
-        deviceId: (await this.prisma.device.findUnique({ where: { deviceId } }))?.id ?? '',
+        deviceId: device.id,
         token: refreshToken,
         expiresAt,
       },
     });
 
-    // Store session in Redis for quick lookup (15 min TTL matching access token)
     await this.redisService.set(`session:${userId}:${deviceId}`, 'active', 15 * 60);
 
     return {
       accessToken,
       refreshToken,
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION', {
-        infer: true,
-      }),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRATION', { infer: true }),
     };
   }
 
