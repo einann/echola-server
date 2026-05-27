@@ -52,8 +52,8 @@ export class RedisIoAdapter extends IoAdapter {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.logger.error(`❌ Failed to connect Redis adapter: ${message}`);
-      // Bağlantı başarısızsa uygulamanın çökmesi mi gerekiyor yoksa devam mı etmeli?
-      // Genelde Redis yoksa socket çalışmayacağı için throw etmek mantıklıdır.
+      // Without Redis the socket layer cannot scale across instances, so fail
+      // fast rather than starting in a broken state.
       throw error;
     }
   }

@@ -18,7 +18,6 @@ export class ImageProcessor {
     const image = sharp(buffer);
     const originalMetadata = await image.metadata();
 
-    // Metadata çıkar
     const metadata: MediaMetadata = {
       width: originalMetadata.width,
       height: originalMetadata.height,
@@ -26,10 +25,7 @@ export class ImageProcessor {
       size: buffer.length,
     };
 
-    // Optimize et (boyut sınırla, kalite ayarla)
     const optimized = await this.optimize(buffer, originalMetadata);
-
-    // Thumbnail üret
     const thumbnail = await this.generateThumbnail(buffer);
 
     return { optimized, thumbnail, metadata };
@@ -38,7 +34,6 @@ export class ImageProcessor {
   private async optimize(buffer: Buffer, metadata: sharp.Metadata): Promise<Buffer> {
     let pipeline = sharp(buffer);
 
-    // Boyut sınırlama
     if (metadata.width > this.MAX_DIMENSION || metadata.height > this.MAX_DIMENSION) {
       pipeline = pipeline.resize(this.MAX_DIMENSION, this.MAX_DIMENSION, {
         fit: 'inside',
@@ -46,7 +41,6 @@ export class ImageProcessor {
       });
     }
 
-    // Format ve kalite
     return pipeline.jpeg({ quality: this.QUALITY, progressive: true }).toBuffer();
   }
 

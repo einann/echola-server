@@ -53,12 +53,10 @@ export class MediaService {
     private readonly configService: ConfigService<EnvironmentVariables>,
   ) {}
 
-  /**
-   * Yükleme için presigned URL üretir
-   */
   async requestUploadUrl(dto: MediaUploadRequestDto): Promise<PresignedUrlResult> {
-    // İlk savunma hattı: client'ın bildirdiği boyut limiti geçiyorsa URL hiç
-    // verme. Asıl doğrulama confirmUpload'ta gerçek buffer üzerinden yapılıyor.
+    // First line of defense: reject before issuing a URL if the client-declared
+    // size exceeds the limit. The authoritative check happens in confirmUpload
+    // against the actual buffer.
     this.enforceSizeLimit(dto.fileSize, dto.mediaType);
 
     const fileKey = this.generateTempKey(dto.fileName);
@@ -70,26 +68,22 @@ export class MediaService {
     );
   }
 
-  /**
-   * Yüklenen dosyayı işler ve kalıcı storage'a taşır
-   */
   async confirmUpload(dto: MediaUploadConfirmDto): Promise<ProcessedMedia> {
     try {
       const buffer = await this.storageService.getBuffer(StorageBucket.TEMP, dto.fileKey);
 
-      // Buffer'ın gerçek boyutu üzerinden limiti uygula. requestUploadUrl'deki
-      // kontrol client'ın bildirdiği boyutu güvendiği için aşılabilir — gerçek
-      // boyut burada kesin doğrulanıyor.
+      // Re-check size against the real buffer because the requestUploadUrl
+      // check trusts the client-declared value and can be bypassed.
       this.enforceSizeLimit(buffer.length, dto.mediaType);
 
-      // Magic-byte ile gerçek mime'ı doğrula. Client'ın beyan ettiği mime'a
-      // güvenmiyoruz — saldırgan .jpg etiketiyle binary yüklemeyi denemiş olabilir.
+      // Detect the real mime via magic bytes. Never trust the client-declared
+      // mime — an attacker may upload a binary disguised as e.g. a JPEG.
       const detectedMime = await this.validateFileType(buffer, dto.mediaType);
 
       const processed = await this.processMedia(buffer, dto.mediaType, detectedMime);
       return await this.uploadProcessedMedia(processed, dto.conversationId, dto.mediaType);
     } finally {
-      // Validation/processing başarısız olsa bile temp dosya çöp olarak kalmasın.
+      // Make sure the temp object is removed even if validation/processing fails.
       await this.storageService.delete(StorageBucket.TEMP, dto.fileKey).catch(() => undefined);
     }
   }
@@ -108,8 +102,8 @@ export class MediaService {
       case MediaType.IMAGE:
         return this.configService.getOrThrow('MAX_IMAGE_SIZE', { infer: true });
       case MediaType.VIDEO:
-      // Voice/audio limiti şu an video limitiyle aynı tutuluyor; ayrı bir
-      // MAX_AUDIO_SIZE env değişkeni eklenmek istenirse buradan değiştirilebilir.
+      // Audio falls back to the video limit. Add a dedicated MAX_AUDIO_SIZE
+      // env var here if a finer cap is needed.
       // eslint-disable-next-line no-fallthrough
       case MediaType.AUDIO:
         return this.configService.getOrThrow('MAX_VIDEO_SIZE', { infer: true });
@@ -119,8 +113,8 @@ export class MediaService {
   }
 
   /**
-   * Buffer'ın gerçek mime tipini magic-byte ile tespit eder ve beyan edilen
-   * mediaType ile uyumlu olup olmadığını kontrol eder. Uyumsuzsa atar.
+   * Detects the real mime via magic bytes and throws if it does not belong to
+   * the declared mediaType's allowlist.
    */
   private async validateFileType(buffer: Buffer, mediaType: MediaType): Promise<string> {
     const { fileTypeFromBuffer } = await dynamicImport<{
@@ -142,9 +136,6 @@ export class MediaService {
     return detected.mime;
   }
 
-  /**
-   * Download URL üretir (client'ın dosyayı indirmesi için)
-   */
   async getDownloadUrl(bucket: StorageBucket, fileKey: string): Promise<string> {
     return this.storageService.generatePresignedDownloadUrl(bucket, fileKey);
   }
@@ -172,7 +163,8 @@ export class MediaService {
       case MediaType.VIDEO: {
         const result = await this.videoProcessor.process(buffer, 'video/mp4');
         return {
-          mainBuffer: buffer, // Video'yu olduğu gibi bırak (veya transcode et)
+          // Videos are stored as-is; only the thumbnail is generated server-side.
+          mainBuffer: buffer,
           thumbnailBuffer: result.thumbnail,
           metadata: result.metadata,
         };
@@ -216,7 +208,6 @@ export class MediaService {
     const baseKey = `${conversationId}/${randomUUID()}`;
     const bucket = this.getBucketForMediaType(mediaType);
 
-    // Ana dosyayı yükle
     const mainResult = await this.storageService.uploadBuffer(
       bucket,
       `${baseKey}.${this.getExtension(processed.metadata.mimeType)}`,
@@ -224,7 +215,6 @@ export class MediaService {
       processed.metadata.mimeType,
     );
 
-    // Thumbnail varsa yükle
     let thumbnailResult: UploadResult;
     if (processed.thumbnailBuffer) {
       thumbnailResult = await this.storageService.uploadBuffer(
@@ -239,9 +229,9 @@ export class MediaService {
       originalKey: mainResult.key,
       originalUrl: mainResult.url,
       originalSize: mainResult.size,
-      // @ts-expect-error 'TODO: düzeltilecek'
+      // @ts-expect-error thumbnailResult is only assigned when thumbnailBuffer exists
       thumbnailKey: thumbnailResult?.key,
-      // @ts-expect-error 'TODO: düzeltilecek'
+      // @ts-expect-error thumbnailResult is only assigned when thumbnailBuffer exists
       thumbnailUrl: thumbnailResult?.url,
       metadata: processed.metadata,
       waveformData: processed.waveformData,

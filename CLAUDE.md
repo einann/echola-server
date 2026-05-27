@@ -399,14 +399,14 @@ GitHub Actions workflow (`.github/workflows/ci.yml`) runs on push/PR to `main` a
 
 ## API Documentation (Swagger)
 
-OpenAPI dokümanı `@nestjs/swagger` ile üretilir ve **sadece non-production** ortamlarda servis edilir (production'da API yüzeyini gereksiz ifşa etmemek için).
+OpenAPI docs are generated with `@nestjs/swagger` and served **only in non-production** environments to avoid exposing the API surface in production.
 
 - URL: `http://localhost:<PORT>/api/docs`
-- Bearer auth scheme: `access-token` (Authorize butonundan login response'undaki access token girilir; `persistAuthorization` açık olduğu için sekme yenilense bile saklanır)
-- DTO'lar için manuel `@ApiProperty` gerekli değil — `nest-cli.json`'da Swagger CLI plugin'i etkin (`introspectComments: true`, `classValidatorShim: true`) class-validator dekoratörlerinden otomatik üretiyor
-- Tag düzeni: Auth, Users, Conversations, Messages, Media, Notifications, Storage, Health
-- Yeni controller eklerken: `@ApiTags('<tag>')` ve protected ise `@ApiBearerAuth('access-token')` dekoratörlerini ekle. Endpoint başlıkları için `@ApiOperation({ summary })` kullan
-- WebSocket eventleri Swagger'da görünmez — bu doc sadece REST içindir
+- Bearer auth scheme: `access-token` — paste the access token from the login response via the Authorize button. `persistAuthorization` is enabled so the token survives page reloads.
+- Manual `@ApiProperty` is not required on DTOs — the Swagger CLI plugin is enabled in `nest-cli.json` (`introspectComments: true`, `classValidatorShim: true`) and generates them automatically from class-validator decorators.
+- Tag layout: Auth, Users, Conversations, Messages, Media, Notifications, Storage, Health
+- When adding a new controller: apply `@ApiTags('<tag>')`, and `@ApiBearerAuth('access-token')` if it is protected. Use `@ApiOperation({ summary })` to give endpoints human-readable titles.
+- WebSocket events do not appear in Swagger — this documentation covers REST only.
 
 # When implementing a new library or framework, or adding a feature that uses them, check the latest documentation using context7.
 

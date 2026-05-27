@@ -16,5 +16,5 @@ export class MediaUploadRequestDto {
 
   @IsString()
   @IsOptional()
-  conversationId?: string; // Opsiyonel, key üretimi için
+  conversationId?: string;
 }

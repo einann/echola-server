@@ -1,7 +1,7 @@
 export interface MediaMetadata {
   width?: number;
   height?: number;
-  duration?: number; // video/audio için saniye
+  duration?: number; // seconds (video/audio)
   mimeType: string;
   size: number;
   waveformData?: number[]; // Audio waveform peaks (0-1 normalized)

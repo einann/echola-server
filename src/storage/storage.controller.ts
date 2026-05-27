@@ -24,10 +24,6 @@ import { JwtAccessGuard } from 'src/auth/guards/jwt-access.guard';
 export class StorageController {
   constructor(private readonly storageService: StorageService) {}
 
-  /**
-   * POST /storage/presigned-url
-   * Test: Presigned URL üret
-   */
   @Post('presigned-url')
   async generatePresignedUrl(
     @Body()
@@ -46,10 +42,6 @@ export class StorageController {
     );
   }
 
-  /**
-   * POST /storage/upload
-   * Test: Direkt dosya yükle (multipart)
-   */
   @Post('upload/:bucket')
   @UseInterceptors(FileInterceptor('file'))
   async uploadFile(
@@ -67,10 +59,6 @@ export class StorageController {
     };
   }
 
-  /**
-   * GET /storage/download-url/:bucket/:key
-   * Test: Download URL al
-   */
   @Get('download-url/:bucket/*')
   async getDownloadUrl(
     @Param('bucket') bucket: StorageBucket,
@@ -82,11 +70,6 @@ export class StorageController {
     return { url };
   }
 
-  /**
-   * DELETE /storage/:bucket/:key
-   * Test: Dosya sil
-   * TODO: yukarıdaki gibi düzeltilecek.
-   */
   @Delete(':bucket/*')
   async deleteFile(
     @Param('bucket') bucket: StorageBucket,
@@ -101,10 +84,6 @@ export class StorageController {
     };
   }
 
-  /**
-   * GET /storage/buckets
-   * Test: Mevcut bucket'ları listele
-   */
   @Get('buckets')
   getBuckets() {
     return {

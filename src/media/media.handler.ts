@@ -17,7 +17,7 @@ export class MediaHandler {
 
   /**
    * Socket event: media:confirm_upload
-   * İşlem tamamlanınca ProcessedMedia döner, bu MessageHandler'a iletilir
+   * Returns ProcessedMedia which is then forwarded to MessageHandler.
    */
   async handleUploadConfirm(dto: MediaUploadConfirmDto): Promise<ProcessedMedia> {
     return this.mediaService.confirmUpload(dto);

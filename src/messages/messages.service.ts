@@ -70,7 +70,7 @@ export class MessagesService {
             username: true,
           },
         },
-        attachments: true, // Reply'da da attachment göster
+        attachments: true,
       },
     },
     attachments: true,
@@ -97,13 +97,11 @@ export class MessagesService {
   async sendMessage(senderId: string, sendMessageDto: SendMessageDto) {
     const { conversationId, content, replyToId } = sendMessageDto;
 
-    // Verify sender is participant
     await this.verifyParticipant(conversationId, senderId);
 
-    // DIRECT konuşmada karşı taraf bloklanmışsa mesaj gönderilemez
+    // In a DIRECT conversation, refuse if either side has blocked the other.
     await this.ensureNotBlockedInDirect(conversationId, senderId);
 
-    // Validate content
     if (!content?.trim()) {
       throw new BadRequestException('Text messages must have content');
     }
@@ -145,13 +143,9 @@ export class MessagesService {
   // ============================================
 
   async createMediaMessage(dto: CreateMediaMessageDto) {
-    // Verify sender is participant
     await this.verifyParticipant(dto.conversationId, dto.senderId);
-
-    // DIRECT konuşmada karşı taraf bloklanmışsa medya da gönderilemez
     await this.ensureNotBlockedInDirect(dto.conversationId, dto.senderId);
 
-    // Verify reply-to if specified
     if (dto.replyToId) {
       await this.verifyReplyToMessage(dto.replyToId, dto.conversationId);
     }
@@ -386,6 +380,9 @@ export class MessagesService {
 
     const enriched = await this.enrichMessage(updated);
 
+    // Edits can be triggered from both REST and WebSocket flows; emit from the
+    // service so every connected client sees the update regardless of entry
+    // point. The Socket.IO Redis adapter handles cross-server fan-out.
     this.socketService.emitToConversation(updated.conversationId, 'message_edited', enriched);
 
     return enriched;
@@ -458,7 +455,6 @@ export class MessagesService {
         deletedAt: new Date(),
         type: MessageType.DELETED,
         content: null,
-        // Attachment kayıtlarını da temizle (opsiyonel, cascade da yapabilirsin)
         attachments: deleteForEveryone ? { deleteMany: {} } : undefined,
       },
     });
@@ -751,10 +747,10 @@ export class MessagesService {
   // ============================================
 
   /**
-   * DIRECT konuşmalarda iki taraf arasındaki bidirectional block durumunu
-   * kontrol eder. Conversation oluşturulduktan sonra taraflardan biri diğerini
-   * bloklamış olabilir; bu durumda mesaj akışı durdurulmalı. GROUP'larda block
-   * geçerli değildir (üye yönetimi ayrı bir kontrol).
+   * Bidirectional block check for DIRECT conversations. Either party may have
+   * blocked the other after the conversation was created, so any new message
+   * flow must be stopped. GROUP conversations are unaffected — membership
+   * itself is gated by a separate block check elsewhere.
    */
   private async ensureNotBlockedInDirect(conversationId: string, senderId: string): Promise<void> {
     const conversation = await this.prisma.conversation.findUnique({

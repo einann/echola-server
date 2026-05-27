@@ -11,13 +11,13 @@ import { JwtAccessGuard } from './guards/jwt-access.guard';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @ApiOperation({ summary: 'Yeni kullanıcı kaydı ve cihaz oluşturma' })
+  @ApiOperation({ summary: 'Register a new user and create the initial device' })
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
-  @ApiOperation({ summary: 'Email + parola ile giriş; access ve refresh token döner' })
+  @ApiOperation({ summary: 'Email + password login; returns access and refresh tokens' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto) {
@@ -25,7 +25,7 @@ export class AuthController {
   }
 
   @ApiOperation({
-    summary: 'Refresh token ile yeni access/refresh çifti al (rotation + reuse detection)',
+    summary: 'Exchange a refresh token for a new pair (rotation + reuse detection)',
   })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -34,7 +34,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Mevcut cihazdan çıkış (refresh token iptal)' })
+  @ApiOperation({ summary: 'Sign out the current device (revokes its refresh token)' })
   @Post('logout')
   @UseGuards(JwtAccessGuard)
   @HttpCode(HttpStatus.OK)
@@ -44,7 +44,7 @@ export class AuthController {
   }
 
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Tüm cihazlardan çıkış' })
+  @ApiOperation({ summary: 'Sign out from every device' })
   @Post('logout-all')
   @UseGuards(JwtAccessGuard)
   @HttpCode(HttpStatus.OK)

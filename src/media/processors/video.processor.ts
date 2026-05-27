@@ -16,7 +16,7 @@ export interface VideoProcessResult {
 @Injectable()
 export class VideoProcessor {
   private readonly TEMP_DIR = '/tmp/video-processing';
-  private readonly THUMBNAIL_TIME = '00:00:01'; // 1. saniyeden al
+  private readonly THUMBNAIL_TIME = '00:00:01';
 
   async process(buffer: Buffer, mimeType: string): Promise<VideoProcessResult> {
     const jobId = randomUUID();
@@ -27,16 +27,13 @@ export class VideoProcessor {
       await fs.mkdir(this.TEMP_DIR, { recursive: true });
       await fs.writeFile(inputPath, buffer);
 
-      // FFprobe ile metadata al
       const metadata = await this.extractMetadata(inputPath, mimeType);
 
-      // FFmpeg ile thumbnail üret
       await this.generateThumbnail(inputPath, outputPath);
       const thumbnail = await fs.readFile(outputPath);
 
       return { thumbnail, metadata };
     } finally {
-      // Cleanup
       await fs.unlink(inputPath).catch(() => {});
       await fs.unlink(outputPath).catch(() => {});
     }

@@ -74,7 +74,7 @@ export class MessagesHandler {
 
     // Get presigned URL from media service
     const result = await this.mediaService.requestUploadUrl({
-      // @ts-expect-error 'TODO: Prisma/enum ile dto karışıyor'
+      // @ts-expect-error MediaType DTO enum and Prisma enum are not type-compatible
       mediaType: data.mediaType,
       mimeType: data.mimeType,
       fileName: data.fileName,
@@ -116,7 +116,7 @@ export class MessagesHandler {
     // Process media (resize, thumbnail, move to permanent storage)
     const processedMedia = await this.mediaService.confirmUpload({
       fileKey: data.fileKey,
-      // @ts-expect-error 'TODO: Prisma/enum ile dto karışıyor'
+      // @ts-expect-error MediaType DTO enum and Prisma enum are not type-compatible
       mediaType: data.mediaType,
       conversationId: data.conversationId,
     });

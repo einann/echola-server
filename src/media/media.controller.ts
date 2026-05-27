@@ -11,19 +11,11 @@ import { JwtAccessGuard } from 'src/auth/guards/jwt-access.guard';
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
-  /**
-   * POST /media/upload-url
-   * Presigned upload URL al
-   */
   @Post('upload-url')
   async getUploadUrl(@Body() dto: MediaUploadRequestDto) {
     return this.mediaService.requestUploadUrl(dto);
   }
 
-  /**
-   * POST /media/confirm
-   * Yüklemeyi onayla ve işle
-   */
   @Post('confirm')
   async confirmUpload(@Body() dto: MediaUploadConfirmDto) {
     const processedMedia = await this.mediaService.confirmUpload(dto);
@@ -34,10 +26,6 @@ export class MediaController {
     };
   }
 
-  /**
-   * GET /media/download-url/:bucket/:key
-   * Download URL al
-   */
   @Get('download-url/:bucket/*')
   async getDownloadUrl(
     @Param('bucket') bucket: string,

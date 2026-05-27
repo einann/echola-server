@@ -71,15 +71,15 @@ async function bootstrap() {
   });
 
   // ================================
-  // SWAGGER (production'da kapalı — API yüzeyini gereksiz yere ifşa etmemek için)
+  // SWAGGER (disabled in production to avoid exposing the API surface)
   // ================================
   if (configService.get<string>('NODE_ENV') !== 'production') {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Echola API')
       .setDescription(
-        'Echola gerçek zamanlı mesajlaşma backend API\'si. ' +
-          'WebSocket (`/chat` namespace) ve REST endpoint\'leri içerir. ' +
-          'Korumalı endpoint\'ler için Authorize butonundan JWT access token girin.',
+        'Echola real-time messaging backend API. ' +
+          'Exposes REST endpoints alongside the WebSocket gateway (`/chat` namespace). ' +
+          'For protected endpoints, paste the JWT access token via the Authorize button.',
       )
       .setVersion('1.0')
       .addBearerAuth(
@@ -87,18 +87,18 @@ async function bootstrap() {
           type: 'http',
           scheme: 'bearer',
           bearerFormat: 'JWT',
-          description: 'JWT access token (login/register response\'undan alınır)',
+          description: 'JWT access token returned from login/register',
         },
         'access-token',
       )
-      .addTag('Auth', 'Kayıt, giriş, refresh token, logout')
-      .addTag('Users', 'Profil, avatar, arama, block/unblock')
-      .addTag('Conversations', 'Direct ve group konuşmaları, archive/pin/mute')
-      .addTag('Messages', 'Mesaj gönderme, düzenleme, silme, forward, search')
-      .addTag('Media', 'Medya yükleme (presigned URL), confirm')
-      .addTag('Notifications', 'FCM token yönetimi')
-      .addTag('Storage', 'Storage testleri (dev-only)')
-      .addTag('Health', 'Liveness/readiness probe\'ları')
+      .addTag('Auth', 'Registration, login, refresh token, logout')
+      .addTag('Users', 'Profile, avatar, search, block/unblock')
+      .addTag('Conversations', 'Direct and group conversations, archive/pin/mute')
+      .addTag('Messages', 'Send, edit, delete, forward, search')
+      .addTag('Media', 'Media upload (presigned URL) and confirm')
+      .addTag('Notifications', 'FCM token management')
+      .addTag('Storage', 'Storage test endpoints (dev-only)')
+      .addTag('Health', 'Liveness and readiness probes')
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

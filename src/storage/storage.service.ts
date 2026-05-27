@@ -36,9 +36,6 @@ export class StorageService {
     });
   }
 
-  /**
-   * Uygulama başladığında bucket'ları kontrol et ve oluştur
-   */
   async onModuleInit(): Promise<void> {
     const buckets = Object.values(StorageBucket);
 
@@ -60,9 +57,6 @@ export class StorageService {
     }
   }
 
-  /**
-   * Presigned upload URL üretir
-   */
   async generatePresignedUploadUrl(
     bucket: StorageBucket,
     fileKey: string,
@@ -84,9 +78,6 @@ export class StorageService {
     };
   }
 
-  /**
-   * Presigned download URL üretir
-   */
   async generatePresignedDownloadUrl(
     bucket: StorageBucket,
     fileKey: string,
@@ -101,18 +92,15 @@ export class StorageService {
   }
 
   /**
-   * Avatar key'inden signed URL üretir. Key null ise null döner.
-   * Avatar'lar MEDIA bucket'ında tutulur. Signed URL kısa ömürlüdür,
-   * stable olan key'dir; her okumada yeni URL üretilir.
+   * Returns a short-lived signed URL for the given avatar key, or null if no
+   * key is set. The key is the stable identifier stored in the DB; the URL is
+   * regenerated on every read because it expires.
    */
   async getAvatarUrl(avatarKey: string | null | undefined): Promise<string | null> {
     if (!avatarKey) return null;
     return this.generatePresignedDownloadUrl(StorageBucket.MEDIA, avatarKey, 3600);
   }
 
-  /**
-   * Buffer'dan dosya yükler (işlenmiş medyalar için)
-   */
   async uploadBuffer(
     bucket: StorageBucket,
     fileKey: string,
@@ -136,9 +124,6 @@ export class StorageService {
     };
   }
 
-  /**
-   * Dosyayı Buffer olarak okur (processing için)
-   */
   async getBuffer(bucket: StorageBucket, fileKey: string): Promise<Buffer> {
     const command = new GetObjectCommand({
       Bucket: bucket,
@@ -155,9 +140,6 @@ export class StorageService {
     return Buffer.concat(chunks);
   }
 
-  /**
-   * Dosya siler
-   */
   async delete(bucket: StorageBucket, fileKey: string): Promise<void> {
     const command = new DeleteObjectCommand({
       Bucket: bucket,
@@ -167,9 +149,6 @@ export class StorageService {
     await this.s3Client.send(command);
   }
 
-  /**
-   * Toplu silme
-   */
   async deleteMany(bucket: StorageBucket, fileKeys: string[]): Promise<void> {
     await Promise.all(fileKeys.map((key) => this.delete(bucket, key)));
   }
