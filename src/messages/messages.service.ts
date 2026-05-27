@@ -23,6 +23,7 @@ import { EnvironmentVariables } from 'src/config/env.validation';
 import { StorageService } from 'src/storage/storage.service';
 import { StorageBucket } from 'src/storage/enums';
 import { UsersService } from 'src/users/users.service';
+import { SocketService } from 'src/socket/socket.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ForwardMessageDto } from './dto/forward-message.dto';
 
@@ -33,6 +34,7 @@ export class MessagesService {
     private configService: ConfigService<EnvironmentVariables>,
     private storageService: StorageService,
     private usersService: UsersService,
+    private socketService: SocketService,
     @Inject(Logger) private readonly logger: Logger,
   ) {}
 
@@ -382,7 +384,11 @@ export class MessagesService {
       include: this.messageInclude,
     });
 
-    return this.enrichMessage(updated);
+    const enriched = await this.enrichMessage(updated);
+
+    this.socketService.emitToConversation(updated.conversationId, 'message_edited', enriched);
+
+    return enriched;
   }
 
   // ============================================
