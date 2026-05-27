@@ -1,14 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import type { FileTypeResult } from 'file-type';
-
-// file-type is ESM-only. TypeScript with `module: commonjs` would otherwise
-// rewrite `await import('file-type')` into a require() call and crash at
-// runtime with ERR_REQUIRE_ESM. Using `new Function` keeps the import native.
-const dynamicImport = new Function('m', 'return import(m)') as <T = unknown>(
-  m: string,
-) => Promise<T>;
 import { StorageService } from '../storage/storage.service';
 import { StorageBucket } from '../storage/enums';
 import { ImageProcessor, VideoProcessor, AudioProcessor } from './processors';
@@ -16,6 +10,14 @@ import { MediaType } from './enums';
 import { ProcessedMedia } from './interfaces';
 import { MediaUploadRequestDto, MediaUploadConfirmDto } from './dto';
 import { PresignedUrlResult, UploadResult } from '../storage/interfaces';
+import { EnvironmentVariables } from '../config/env.validation';
+
+// file-type is ESM-only. TypeScript with `module: commonjs` would otherwise
+// rewrite `await import('file-type')` into a require() call and crash at
+// runtime with ERR_REQUIRE_ESM. Using `new Function` keeps the import native.
+const dynamicImport = new Function('m', 'return import(m)') as <T = unknown>(
+  m: string,
+) => Promise<T>;
 
 const ALLOWED_MIMES_PER_TYPE: Record<MediaType, ReadonlySet<string>> = {
   [MediaType.IMAGE]: new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']),
@@ -48,12 +50,17 @@ export class MediaService {
     private readonly imageProcessor: ImageProcessor,
     private readonly videoProcessor: VideoProcessor,
     private readonly audioProcessor: AudioProcessor,
+    private readonly configService: ConfigService<EnvironmentVariables>,
   ) {}
 
   /**
    * Yükleme için presigned URL üretir
    */
   async requestUploadUrl(dto: MediaUploadRequestDto): Promise<PresignedUrlResult> {
+    // İlk savunma hattı: client'ın bildirdiği boyut limiti geçiyorsa URL hiç
+    // verme. Asıl doğrulama confirmUpload'ta gerçek buffer üzerinden yapılıyor.
+    this.enforceSizeLimit(dto.fileSize, dto.mediaType);
+
     const fileKey = this.generateTempKey(dto.fileName);
 
     return this.storageService.generatePresignedUploadUrl(
@@ -70,6 +77,11 @@ export class MediaService {
     try {
       const buffer = await this.storageService.getBuffer(StorageBucket.TEMP, dto.fileKey);
 
+      // Buffer'ın gerçek boyutu üzerinden limiti uygula. requestUploadUrl'deki
+      // kontrol client'ın bildirdiği boyutu güvendiği için aşılabilir — gerçek
+      // boyut burada kesin doğrulanıyor.
+      this.enforceSizeLimit(buffer.length, dto.mediaType);
+
       // Magic-byte ile gerçek mime'ı doğrula. Client'ın beyan ettiği mime'a
       // güvenmiyoruz — saldırgan .jpg etiketiyle binary yüklemeyi denemiş olabilir.
       const detectedMime = await this.validateFileType(buffer, dto.mediaType);
@@ -79,6 +91,30 @@ export class MediaService {
     } finally {
       // Validation/processing başarısız olsa bile temp dosya çöp olarak kalmasın.
       await this.storageService.delete(StorageBucket.TEMP, dto.fileKey).catch(() => undefined);
+    }
+  }
+
+  private enforceSizeLimit(size: number, mediaType: MediaType): void {
+    const limit = this.getSizeLimit(mediaType);
+    if (size > limit) {
+      throw new BadRequestException(
+        `File size ${size} exceeds the ${mediaType.toLowerCase()} limit of ${limit} bytes`,
+      );
+    }
+  }
+
+  private getSizeLimit(mediaType: MediaType): number {
+    switch (mediaType) {
+      case MediaType.IMAGE:
+        return this.configService.getOrThrow('MAX_IMAGE_SIZE', { infer: true });
+      case MediaType.VIDEO:
+      // Voice/audio limiti şu an video limitiyle aynı tutuluyor; ayrı bir
+      // MAX_AUDIO_SIZE env değişkeni eklenmek istenirse buradan değiştirilebilir.
+      // eslint-disable-next-line no-fallthrough
+      case MediaType.AUDIO:
+        return this.configService.getOrThrow('MAX_VIDEO_SIZE', { infer: true });
+      case MediaType.DOCUMENT:
+        return this.configService.getOrThrow('MAX_DOCUMENT_SIZE', { infer: true });
     }
   }
 
