@@ -6,9 +6,10 @@ import { ReactionsService } from './reactions.service';
 import { MessagesHandler } from './messages.handler';
 import { ReactionsHandler } from './reactions.handler';
 import { MediaModule } from 'src/media/media.module';
+import { UsersModule } from 'src/users/users.module';
 
 @Module({
-  imports: [PrismaModule, MediaModule],
+  imports: [PrismaModule, MediaModule, UsersModule],
   controllers: [MessagesController],
   providers: [MessagesService, MessagesHandler, ReactionsService, ReactionsHandler],
   exports: [MessagesService, MessagesHandler, ReactionsHandler],

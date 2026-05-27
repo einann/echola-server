@@ -10,12 +10,19 @@ import {
 import { Logger } from 'nestjs-pino';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { DeliveryStatus, MessageType, MediaType, Message } from 'generated/prisma/client';
+import {
+  ConversationType,
+  DeliveryStatus,
+  MessageType,
+  MediaType,
+  Message,
+} from 'generated/prisma/client';
 import { CreateMediaMessageDto } from './dto/create-media-message.dto';
 import { ConfigService } from '@nestjs/config';
 import { EnvironmentVariables } from 'src/config/env.validation';
 import { StorageService } from 'src/storage/storage.service';
 import { StorageBucket } from 'src/storage/enums';
+import { UsersService } from 'src/users/users.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ForwardMessageDto } from './dto/forward-message.dto';
 
@@ -25,6 +32,7 @@ export class MessagesService {
     private prisma: PrismaService,
     private configService: ConfigService<EnvironmentVariables>,
     private storageService: StorageService,
+    private usersService: UsersService,
     @Inject(Logger) private readonly logger: Logger,
   ) {}
 
@@ -90,6 +98,9 @@ export class MessagesService {
     // Verify sender is participant
     await this.verifyParticipant(conversationId, senderId);
 
+    // DIRECT konuşmada karşı taraf bloklanmışsa mesaj gönderilemez
+    await this.ensureNotBlockedInDirect(conversationId, senderId);
+
     // Validate content
     if (!content?.trim()) {
       throw new BadRequestException('Text messages must have content');
@@ -134,6 +145,9 @@ export class MessagesService {
   async createMediaMessage(dto: CreateMediaMessageDto) {
     // Verify sender is participant
     await this.verifyParticipant(dto.conversationId, dto.senderId);
+
+    // DIRECT konuşmada karşı taraf bloklanmışsa medya da gönderilemez
+    await this.ensureNotBlockedInDirect(dto.conversationId, dto.senderId);
 
     // Verify reply-to if specified
     if (dto.replyToId) {
@@ -553,9 +567,11 @@ export class MessagesService {
     // Verify sender can access the original message's conversation
     await this.verifyParticipant(originalMessage.conversationId, senderId);
 
-    // Verify sender is participant in all target conversations
+    // Verify sender is participant in all target conversations and that none
+    // of the DIRECT targets have a blocking relationship
     for (const targetConversationId of dto.targetConversationIds) {
       await this.verifyParticipant(targetConversationId, senderId);
+      await this.ensureNotBlockedInDirect(targetConversationId, senderId);
     }
 
     // Determine the original sender for forwarding metadata
@@ -727,6 +743,34 @@ export class MessagesService {
   // ============================================
   // HELPER METHODS
   // ============================================
+
+  /**
+   * DIRECT konuşmalarda iki taraf arasındaki bidirectional block durumunu
+   * kontrol eder. Conversation oluşturulduktan sonra taraflardan biri diğerini
+   * bloklamış olabilir; bu durumda mesaj akışı durdurulmalı. GROUP'larda block
+   * geçerli değildir (üye yönetimi ayrı bir kontrol).
+   */
+  private async ensureNotBlockedInDirect(conversationId: string, senderId: string): Promise<void> {
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: {
+        type: true,
+        participants: {
+          where: { leftAt: null },
+          select: { userId: true },
+        },
+      },
+    });
+
+    if (!conversation || conversation.type !== ConversationType.DIRECT) return;
+
+    const other = conversation.participants.find((p) => p.userId !== senderId);
+    if (!other) return;
+
+    if (await this.usersService.isUserBlocked(senderId, other.userId)) {
+      throw new ForbiddenException('Cannot send messages: blocked relationship exists');
+    }
+  }
 
   private async verifyParticipant(conversationId: string, userId: string) {
     const participant = await this.prisma.conversationParticipant.findFirst({
