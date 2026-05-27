@@ -268,9 +268,7 @@ export class GroupManagementService {
       },
     });
 
-    const addedMembers = await Promise.all(
-      newParticipants.map((p) => this.withAvatarUrl(p.user)),
-    );
+    const addedMembers = await Promise.all(newParticipants.map((p) => this.withAvatarUrl(p.user)));
 
     return {
       conversation,

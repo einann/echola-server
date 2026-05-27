@@ -144,10 +144,9 @@ export class AuthService {
     // even when the token is no longer in the DB.
     let payload: { sub: string; deviceId: string };
     try {
-      payload = await this.jwtService.verifyAsync<{ sub: string; deviceId: string }>(
-        refreshToken,
-        { secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }) },
-      );
+      payload = await this.jwtService.verifyAsync<{ sub: string; deviceId: string }>(refreshToken, {
+        secret: this.configService.get('JWT_REFRESH_SECRET', { infer: true }),
+      });
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
